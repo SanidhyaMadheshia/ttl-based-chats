@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Users, AlertCircle, LogOut, MicOff, Trash2, Check, X, Mic, PhoneMissed } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { RequestMember } from "@/lib/types"
 
 type User = {
   id: string
@@ -24,14 +25,18 @@ interface ChatSidebarProps {
   pendingRequests: number
   onRemoveUser: (userId: string) => void
   onMuteUser: (userId: string) => void
-  onApproveRequest: (index: number) => void
-  onRejectRequest: (index: number) => void
+  onApproveRequest: (index: string) => void
+  onRejectRequest: (index: string) => void
   onMuteVoiceUser: (userId: string) => void
   onRemoveVoiceUser: (userId: string) => void
+  requestMembers: RequestMember[]
+  role: string
   isUserInVoice: boolean
 }
 
 export function ChatSidebar({
+  requestMembers,
+  role,
   users,
   voiceUsers,
   pendingRequests,
@@ -44,11 +49,11 @@ export function ChatSidebar({
   isUserInVoice,
 }: ChatSidebarProps) {
   const [expandedUser, setExpandedUser] = useState<string | null>(null)
-  const isAdmin = true
+  const isAdmin = role === "admin" ? true : false
 
   return (
     <aside className="w-64 border-r border-border bg-card p-4 overflow-y-auto">
-      {isAdmin && pendingRequests > 0 && (
+      {/* {isAdmin && pendingRequests > 0 && (
         <Card className="mb-4 bg-secondary/50 p-3">
           <div className="flex items-center gap-2 mb-3">
             <AlertCircle className="h-4 w-4 text-accent" />
@@ -68,7 +73,49 @@ export function ChatSidebar({
             ))}
           </div>
         </Card>
+      )} */}
+      {isAdmin && requestMembers.length > 0 && (
+        <Card className="mb-4 bg-secondary/50 p-3">
+          <div className="flex items-center gap-2 mb-3">
+            <AlertCircle className="h-4 w-4 text-accent" />
+            <h3 className="text-sm font-semibold text-foreground">
+              {requestMembers.length} Join Requests
+            </h3>
+          </div>
+
+          <div className="space-y-2">
+            {requestMembers.map((member) => (
+              <div
+                key={member.id}
+                className="flex items-center gap-2 text-xs"
+              >
+                <span className="flex-1 text-muted-foreground truncate">
+                  {member.name}
+                </span>
+
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 w-6 p-0"
+                  onClick={() => onApproveRequest(member.id)}
+                >
+                  <Check className="h-3 w-3 text-accent" />
+                </Button>
+
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 w-6 p-0"
+                  onClick={() => onRejectRequest(member.id)}
+                >
+                  <X className="h-3 w-3 text-destructive" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        </Card>
       )}
+
 
       {voiceUsers.length > 0 && (
         <div className="mb-6">

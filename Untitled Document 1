@@ -1,0 +1,17 @@
+
+
+
+/validateRole
+
+body : 
+{
+	userId : string , 
+	userKey : string , 
+}
+
+res : 
+{
+	role : string ("member" | "admin")
+}
+
+

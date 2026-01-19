@@ -20,6 +20,7 @@ export function ChatInput({ onSendMessage, isMuted, onJoinVoice, isUserInVoice, 
 
   const handleSend = () => {
     onSendMessage(message)
+    
     setMessage("")
   }
 

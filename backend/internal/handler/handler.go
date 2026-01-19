@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -12,8 +13,9 @@ import (
 )
 
 type CreateRoomRespose struct {
-	ChatID   string `json:"chatID"`
-	AdminKey string `json:"adminKey"`
+	ChatID  string `json:"chatID"`
+	UserKey string `json:"userKey"`
+	UserId  string `json:"userId"`
 }
 
 type ChatHandler struct {
@@ -66,6 +68,7 @@ func (h *ChatHandler) HandleSaveMessage(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *ChatHandler) HandleCreateRoom(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("validate handler called")
 	ctx := r.Context()
 
 	adminName := r.URL.Query().Get("admin")
@@ -74,7 +77,7 @@ func (h *ChatHandler) HandleCreateRoom(w http.ResponseWriter, r *http.Request) {
 
 	ttl, err := time.ParseDuration(ttlRaw)
 
-	chatID, adminKey, err := h.chatService.CreateChatRoom(ctx, ttl, adminName, roomName)
+	chatID, adminKey, adminId, err := h.chatService.CreateChatRoom(ctx, ttl, adminName, roomName)
 
 	if err != nil {
 		http.Error(
@@ -87,8 +90,9 @@ func (h *ChatHandler) HandleCreateRoom(w http.ResponseWriter, r *http.Request) {
 	// resJSon := `{"chatID":"` + chatID + `"}`
 
 	res := &CreateRoomRespose{
-		ChatID:   chatID,
-		AdminKey: adminKey,
+		ChatID:  chatID,
+		UserKey: adminKey,
+		UserId:  adminId,
 	}
 	resJson, err := json.Marshal(res)
 	if err != nil {
@@ -163,7 +167,7 @@ func (h *ChatHandler) HandleGetMembers(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
-	var req middlewares.AdminAuthRequest
+	var req middlewares.MemberAuthRequest
 	if err := json.Unmarshal(bodyBytes, &req); err != nil {
 		http.Error(w, "invalid json", http.StatusBadRequest)
 		return
@@ -195,8 +199,51 @@ func (h *ChatHandler) HandleGetMembers(w http.ResponseWriter, r *http.Request) {
 		resJson,
 	)
 }
+func (h *ChatHandler) HandleGetRequestMembers(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+	var req middlewares.AdminAuthRequest
+	if err := json.Unmarshal(bodyBytes, &req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	members, err := h.chatService.GetChatRoomRequestMembers(ctx, req.RoomID)
+
+	if err != nil {
+		http.Error(
+			w,
+			"failed to get members",
+			500,
+		)
+		return
+	}
+
+	resJson, err := json.Marshal(members)
+	if err != nil {
+		http.Error(
+			w,
+			"failed to marshal response",
+			500,
+		)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(
+		resJson,
+	)
+}
 
 func (h *ChatHandler) HandleRequestToJoin(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("request to join called")
 	ctx := r.Context()
 	bodyBytes, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -216,7 +263,9 @@ func (h *ChatHandler) HandleRequestToJoin(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	memberKey, err := h.chatService.AddRequestRoomMember(ctx, req.RoomID, req.Username)
+	fmt.Printf("Requesting to join room: %s with username: %s\n", req.RoomID, req.Username)
+
+	memberId, memberKey, err := h.chatService.AddRequestRoomMember(ctx, req.RoomID, req.Username)
 	if err != nil {
 		http.Error(
 			w,
@@ -227,9 +276,11 @@ func (h *ChatHandler) HandleRequestToJoin(w http.ResponseWriter, r *http.Request
 	}
 
 	res := struct {
-		MemberKey string `json:"memberKey"`
+		MemberKey string `json:"userKey"`
+		MemberId  string `json:"userId"`
 	}{
 		MemberKey: memberKey,
+		MemberId:  memberId,
 	}
 
 	resJson, err := json.Marshal(res)
@@ -283,5 +334,85 @@ func (h *ChatHandler) HandleJoinRoom(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write(
 		[]byte("ok"),
+	)
+}
+
+func (h *ChatHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+
+	resJson := `{"status":"iski mausi ka tun tun chal gya !!"}`
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(resJson))
+	//
+	// w.Write([]byte("healthy"))
+}
+
+func (h *ChatHandler) HandleGetRole(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+	var req struct {
+		RoomID  string `json:"roomId"`
+		UserKey string `json:"userKey"`
+		UserId  string `json:"userId"`
+	}
+
+	if err := json.Unmarshal(bodyBytes, &req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+
+	role, err := h.chatService.GetRole(ctx, req.RoomID, req.UserId)
+
+	if role == "" {
+		http.Error(w, "user is not in this room ", http.StatusBadRequest)
+	}
+	res := struct {
+		Role string `json:"role"`
+	}{
+		Role: role,
+	}
+
+	resJson, err := json.Marshal(res)
+	w.Header().Set("Content-Type", "application/json")
+	// w.Write([]byte(resJson))
+	w.WriteHeader(http.StatusOK)
+	w.Write(
+		resJson,
+	)
+
+}
+
+func (h *ChatHandler) HandleGetRoomExits(w http.ResponseWriter , r *http.Request) {
+	ctx := r.Context()
+	roomId := r.URL.Query().Get("roomId")
+
+
+
+	exists,err:= h.chatService.GetRoomExists(ctx, roomId)
+
+
+	if err != nil {
+		fmt.Println("error in roomExists", err)
+
+	}
+	res := struct {
+		Exists bool `json:"exists"`
+	}{
+		Exists: exists,
+	}
+
+	resJson, _:= json.Marshal(res)
+	w.Header().Set("Content-Type", "application/json")
+	// w.Write([]byte(resJson))
+	w.WriteHeader(http.StatusOK)
+	w.Write(
+		resJson,
 	)
 }

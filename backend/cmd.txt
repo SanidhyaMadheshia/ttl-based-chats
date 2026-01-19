@@ -1,0 +1,12 @@
+exists room:members:1768497371507115645 
+(integer) 1
+127.0.0.1:3003> smembers room:members:1768497371507115645
+(empty array)
+127.0.0.1:3003> exists room:members:1768497371507115645 
+(integer) 0
+127.0.0.1:3003> exists room:members:1768497701362121277 
+(integer) 1
+127.0.0.1:3003> smembers room:members:1768497701362121277
+1 "VF9xhZJB"
+127.0.0.1:3003> hget room:1768497701362121277 adminKey
+"fuQtC2q7UqlQ"

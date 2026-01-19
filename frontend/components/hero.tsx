@@ -1,6 +1,7 @@
 "use client"
 
 import { Clock, Zap } from "lucide-react"
+import { CreateRoomDialog } from "./createRoomDialog"
 
 export function Hero() {
   return (
@@ -28,11 +29,11 @@ export function Hero() {
           by design.
         </p>
 
-        <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
-          <button className="px-6 py-3 rounded-lg bg-primary text-primary-foreground font-medium hover:opacity-90 transition inline-flex items-center justify-center gap-2">
-            <Zap className="w-4 h-4" />
-            Create a Room
-          </button>
+        <div 
+        className="flex flex-col sm:flex-row gap-4 justify-center mb-16"
+        >
+          
+          <CreateRoomDialog />
           <button className="px-6 py-3 rounded-lg border border-border bg-background hover:bg-secondary/10 text-foreground font-medium transition">
             View Docs
           </button>
