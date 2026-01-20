@@ -5,6 +5,7 @@ package websocket
 import (
 	// "bytes"
 	"encoding/json"
+	"fmt"
 	"log"
 	"time"
 
@@ -35,27 +36,32 @@ type Client struct {
 	JoinedAt time.Time
 }
 
-func NewClient(conn *websocket.Conn, manager *Manager, userId string , roomId string) *Client {
-
+func NewClient(conn *websocket.Conn, manager *Manager, userId string, roomId string) *Client {
+	log.Println("new Cloien room :", roomId)
 	return &Client{
-		ID : uuid.NewString(),
-		UserID: userId,
-		RoomID: roomId,
+		ID:         uuid.NewString(),
+		UserID:     userId,
+		RoomID:     roomId,
 		connection: conn,
 		manager:    manager,
 		// egress:     make(chan []byte),
-		egress: make(chan Event),
+		egress:   make(chan Event),
 		JoinedAt: time.Now(),
 	}
 }
 
 func (c *Client) ReadMessages() {
-	defer func() {
+	// defer func() {
+	// 	c.connection.Close()
+	// 	c.manager.removeClient(c)
+
+	// }()
+	
+	fmt.Println("read message for client :", c.UserID)
+	defer func() { // added
+		c.manager.unregister <- c
 		c.connection.Close()
-		c.manager.removeClient(c)
-
 	}()
-
 	if err := c.connection.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
 		log.Println(err)
 		return
@@ -87,10 +93,14 @@ func (c *Client) ReadMessages() {
 		// log.Println(string(payload))
 		var request Event
 
-		if err := json.Unmarshal(payload, &request); err != nil {
-			log.Printf("error marshelliung event %v", err)
-			break
+		// if err := json.Unmarshal(payload, &request); err != nil {
+		// 	log.Printf("error marshelliung event %v", err)
+		// 	break
 
+		// }
+		if err := json.Unmarshal(payload, &request); err != nil {
+			log.Println("invalid event payload:", err)
+			continue //  do NOT break
 		}
 
 		//
@@ -103,13 +113,15 @@ func (c *Client) ReadMessages() {
 }
 
 func (c *Client) WriteMessages() {
-	defer func() {
-		c.manager.removeClient(c)
+	// defer func() {
+	// 	c.manager.removeClient(c)
 
-	}()
+	// }()
+	fmt.Println("write message for client :", c.UserID)
+	defer c.connection.Close() // added
 
 	ticker := time.NewTicker(pingInterval)
-
+	defer ticker.Stop()
 	for {
 		select {
 		case message, ok := <-c.egress:
@@ -127,12 +139,12 @@ func (c *Client) WriteMessages() {
 				log.Println(err)
 
 			}
-
+			// fmt.Println("event sent .....",string(data))
 			if err := c.connection.WriteMessage(websocket.TextMessage, data); err != nil {
 				log.Println("failed to send the message !!", err)
 				return
 			}
-			log.Println("message sent !!")
+			// log.Println("message sent !!")
 
 		case <-ticker.C:
 			log.Println("Ping")
@@ -143,7 +155,7 @@ func (c *Client) WriteMessages() {
 			}
 		}
 	}
-}
+}		
 
 func (c *Client) pongHandler(pongMsg string) error {
 	log.Println("pong ")

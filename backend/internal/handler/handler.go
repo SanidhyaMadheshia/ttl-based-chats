@@ -51,7 +51,8 @@ func (h *ChatHandler) HandleSaveMessage(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "invalid json", http.StatusBadRequest)
 		return
 	}
-	err2 := h.chatService.SaveRoomMessage(ctx, req.RoomID, *req.Message, req.Username, req.UserID, time.Minute)
+	
+	err2 := h.chatService.SaveRoomMessage(ctx, req.RoomID, *req.Message, req.UserID, time.Minute)
 
 	if err2 != nil {
 		http.Error(
@@ -123,7 +124,7 @@ func (h *ChatHandler) HandleGetMessage(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
-	var req middlewares.AdminAuthRequest
+	var req middlewares.RoomMemberAuthRequest
 	if err := json.Unmarshal(bodyBytes, &req); err != nil {
 		http.Error(w, "invalid json", http.StatusBadRequest)
 		return

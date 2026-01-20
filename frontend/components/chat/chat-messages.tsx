@@ -8,7 +8,7 @@ type Message = {
   userId: string
   userName: string
   content: string
-  timestamp: number
+  // timestamp: number
   isSystemMessage?: boolean
 }
 
@@ -46,9 +46,9 @@ export function ChatMessages({ messages }: ChatMessagesProps) {
                 <div className="group">
                   <div className="flex items-baseline gap-2">
                     <span className="text-sm font-medium text-foreground">{message.userName}</span>
-                    <span className="text-xs text-muted-foreground">
+                    {/* <span className="text-xs text-muted-foreground">
                       {formatDistanceToNow(message.timestamp, { addSuffix: true })}
-                    </span>
+                    </span> */}
                   </div>
                   <div className="mt-1 rounded-lg bg-secondary px-3 py-2 text-sm text-foreground">
                     {message.content}

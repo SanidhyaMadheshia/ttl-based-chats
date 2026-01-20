@@ -318,12 +318,14 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
 	"github.com/SanidhyaMadheshia/ttl-based-chats/backend/internal/db"
 	"github.com/SanidhyaMadheshia/ttl-based-chats/backend/internal/lib"
+	"github.com/SanidhyaMadheshia/ttl-based-chats/backend/internal/websocket"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -357,7 +359,7 @@ func (s *ChatService) CreateChatRoom(
 	adminKeyKey := "room:adminKey:" + roomID
 	memberNameKey := "room:memberName:" + roomID + ":" + adminID
 	memberKeyKey := "room:memberKey:" + roomID + ":" + adminID
-
+	messageKey := "room:messages:" + roomID
 	pipe := s.rdb.Client.TxPipeline()
 
 	pipe.HSet(ctx, roomKey, map[string]interface{}{
@@ -369,7 +371,9 @@ func (s *ChatService) CreateChatRoom(
 	pipe.SAdd(ctx, memberSetKey, adminID)
 	pipe.Set(ctx, memberNameKey, adminName, ttl)
 	pipe.Set(ctx, memberKeyKey, adminKey, ttl)
-
+	pipe.RPush(ctx, messageKey, "__init__")
+	pipe.LPop(ctx, messageKey)
+	pipe.Expire(ctx , messageKey , ttl)
 	pipe.Expire(ctx, roomKey, ttl)
 	pipe.Expire(ctx, memberSetKey, ttl)
 
@@ -616,7 +620,7 @@ func (s *ChatService) SaveRoomMessage(
 	ctx context.Context,
 	roomID string,
 	message string,
-	username string,
+	// username string,
 	userID string,
 	ttl time.Duration,
 ) error {
@@ -630,7 +634,7 @@ func (s *ChatService) SaveRoomMessage(
 			Values: map[string]interface{}{
 				"timestamp": now,
 				"message":   message,
-				"username":  username,
+				// "username":  username,
 				"userId":    userID,
 			},
 		})
@@ -641,26 +645,52 @@ func (s *ChatService) SaveRoomMessage(
 	return err
 }
 
+// func (s *ChatService) GetChatRoomAllMessage(
+// 	ctx context.Context,
+// 	roomID string,
+// ) ([]map[string]string, error) {
+
+// 	streamKey := "room:messages:" + roomID
+
+// 	fmt.Println(streamKey)
+// 	entries, err := s.rdb.Client.XRange(ctx, streamKey, "-", "+").Result()
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	messages := make([]map[string]string, 0, len(entries))
+
+// 	for _, entry := range entries {
+// 		msg := map[string]string{
+// 			"id": entry.ID,
+// 		}
+// 		for k, v := range entry.Values {
+// 			msg[k] = fmt.Sprint(v)
+// 		}
+// 		messages = append(messages, msg)
+// 	}
+
+// 	return messages, nil
+// }
+
 func (s *ChatService) GetChatRoomAllMessage(
 	ctx context.Context,
 	roomID string,
-) ([]map[string]string, error) {
+) ([]websocket.ChatMessage, error) {
 
-	streamKey := "room:messages:" + roomID
+	key := "room:messages:" + roomID
 
-	entries, err := s.rdb.Client.XRange(ctx, streamKey, "-", "+").Result()
+	values, err := s.rdb.Client.LRange(ctx, key, 0, -1).Result()
 	if err != nil {
 		return nil, err
 	}
 
-	messages := make([]map[string]string, 0, len(entries))
+	messages := make([]websocket.ChatMessage, 0, len(values))
 
-	for _, entry := range entries {
-		msg := map[string]string{
-			"id": entry.ID,
-		}
-		for k, v := range entry.Values {
-			msg[k] = fmt.Sprint(v)
+	for _, v := range values {
+		var msg websocket.ChatMessage
+		if err := json.Unmarshal([]byte(v), &msg); err != nil {
+			continue // skip bad message
 		}
 		messages = append(messages, msg)
 	}

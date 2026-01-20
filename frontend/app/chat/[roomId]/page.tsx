@@ -27,7 +27,7 @@ type Message = {
   userId: string
   userName: string
   content: string
-  timestamp: number
+  // timestamp: number
   isSystemMessage?: boolean
 }
 
@@ -45,6 +45,7 @@ interface roomExists {
 
 import { useRouter } from "next/navigation"
 import { RequestMember } from "@/lib/types"
+import { messageParser } from "@/lib/wsEventParser"
 
 
 export default function ChatRoom({ params }: { params: Promise<{ roomId: string }> }) {
@@ -211,6 +212,7 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
       getRequestMembers()
     }
     getMembers()
+    getChats()
     async function getRequestMembers() {
       const res = await axios.post<RequestMember[]>(`${process.env.NEXT_PUBLIC_BACKEND_URL}/getRequestMembers`,
         {
@@ -232,14 +234,43 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
           userKey: key
         }
       )
-      if (! res.data) return 
-      
+      if (!res.data) return
+
       setUsers(res.data)
     }
+    async function getChats() {
+      interface resChat {
+        userId: string,
+        payload: string
+      }
 
+      const res = await axios.post<resChat[]>(`${process.env.NEXT_PUBLIC_BACKEND_URL}/getChats`,
+        {
+          roomId: roomId,
+          userId,
+          userKey: key
+        }
+      )
+      if (!res.data) return;
+      const messages : Message[] = res.data.map((chat, id)=> {
+        var r : Message= {
+          id : id.toString(),
+          userId : chat.userId,
+          userName : "unkown" ,
+          content : chat.payload, 
+          isSystemMessage : false
 
+        } 
+        return  r
 
-  }, [role])
+        
+      })
+        setMessages(messages)
+
+    }
+
+    
+  }, [role ])
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -262,15 +293,37 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
       process.env.NEXT_PUBLIC_BACKEND_URL!.replace("http", "ws") +
       `/ws?userId=${userId}&roomId=${roomId}`
 
+
     const ws = new WebSocket(wsUrl)
 
     ws.onopen = () => {
       console.log("WebSocket connected")
     }
 
+
     ws.onmessage = (event) => {
-      const msg: Message = JSON.parse(event.data)
-      setMessages((prev) => [...prev, msg])
+      const data = JSON.parse(event.data)
+      console.log(data)
+      // setMessages((prev) => [...prev, messageParser(data.payload)])
+      switch (data.type) {
+        case "message":
+          var newMessage = messageParser(data.payload, users)
+          if (newMessage.userId === userId) break;
+          setMessages((prev) => [...prev, newMessage])
+          break
+
+        case "user_joined":
+          console.log(`${data.payload} joined`)
+          break
+
+        case "user_left":
+          console.log(`${data.payload} left`)
+          break
+
+        case "room_closed":
+          ws.close()
+          break
+      }
     }
 
     ws.onerror = (err) => {
@@ -286,7 +339,7 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
     return () => {
       ws.close()
     }
-  }, [role , userId, roomId])
+  }, [role, userId, roomId, users])
 
 
   const formatTime = (seconds: number) => {
@@ -345,6 +398,14 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
 
   const handleSendMessage = (content: string) => {
     if (!content.trim()) return
+    wsRef.current?.send(
+      JSON.stringify({
+        type: "message",
+        roomId,
+        payload: content
+      })
+    )
+    console.log("sendig ..", content)
 
     setMessages((prev) => [
       ...prev,
@@ -353,7 +414,6 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
         userId: "1",
         userName: "You",
         content,
-        timestamp: Date.now(),
       },
     ])
   }

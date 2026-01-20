@@ -46,6 +46,7 @@ func Run() {
 	// mux.Handle()
 	// mux.Handle("/system-status",http.HandlerFunc(handler))
 	// mux.HandleFunc("/bkcd", handler.HandleCrash)
+	go WSmanager.Run() // Added
 	corsHandler := middlewares.CORS(mux)
 
 	mux.HandleFunc("/ws", WSmanager.ServeWS)
