@@ -73,6 +73,7 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
   const wsRef = useRef<WebSocket | null>(null)
   const [showRequestModal, setShowRequestModal] = useState(false)
   const [requestMembers, setRequestMembers] = useState<RequestMember[]>([])
+  const usersRef = useRef<User[]>([])
 
 
 
@@ -252,25 +253,25 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
         }
       )
       if (!res.data) return;
-      const messages : Message[] = res.data.map((chat, id)=> {
-        var r : Message= {
-          id : id.toString(),
-          userId : chat.userId,
-          userName : "unkown" ,
-          content : chat.payload, 
-          isSystemMessage : false
+      const messages: Message[] = res.data.map((chat, id) => {
+        var r: Message = {
+          id: id.toString(),
+          userId: chat.userId,
+          userName: "unkown",
+          content: chat.payload,
+          isSystemMessage: false
 
-        } 
-        return  r
+        }
+        return r
 
-        
+
       })
-        setMessages(messages)
+      setMessages(messages)
 
     }
 
-    
-  }, [role ])
+
+  }, [role])
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -307,20 +308,24 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
       // setMessages((prev) => [...prev, messageParser(data.payload)])
       switch (data.type) {
         case "message":
-          var newMessage = messageParser(data.payload, users)
+          var newMessage = messageParser(data.payload, usersRef.current)
           if (newMessage.userId === userId) break;
           setMessages((prev) => [...prev, newMessage])
           break
 
         case "user_joined":
           console.log(`${data.payload} joined`)
+
           break
 
         case "user_left":
+
           console.log(`${data.payload} left`)
+
           break
 
         case "room_closed":
+          
           ws.close()
           break
       }
@@ -339,7 +344,10 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
     return () => {
       ws.close()
     }
-  }, [role, userId, roomId, users])
+  }, [role, userId, roomId])
+  useEffect(() => {
+    usersRef.current = users
+  }, [users])
 
 
   const formatTime = (seconds: number) => {

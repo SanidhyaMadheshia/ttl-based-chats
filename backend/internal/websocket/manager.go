@@ -49,9 +49,9 @@ func NewManager(rdb *db.RedisClient) *Manager {
 	m := &Manager{
 		rdb:        rdb,
 		clients:    make(ClientList),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-		broadcast:  make(chan RoomEvent),
+		register:   make(chan *Client, 16),
+		unregister: make(chan *Client, 16),
+		broadcast:  make(chan RoomEvent, 64),
 		rooms:      make(map[string]ClientList),
 		handlers:   make(map[string]EventHandler),
 	}
@@ -166,9 +166,11 @@ func (m *Manager) Run() { // ADDED
 		fmt.Println("inside for !!")
 		select {
 		case client := <-m.register:
+			fmt.Println("REGISTER RECEIVED:", client.UserID)
 			m.addClient(client)
 
 		case client := <-m.unregister:
+			fmt.Println("UNREGISTER RECEIVED:", client.UserID)
 			m.removeClient(client)
 
 		case msg := <-m.broadcast:
@@ -186,10 +188,9 @@ func (m *Manager) Run() { // ADDED
 
 // }
 func (m *Manager) addClient(c *Client) {
-	fmt.Println("registering client : ", c.UserID, " roomId : ", c.RoomID)
+	fmt.Println("ADD CLIENT ..............: ", c.UserID, " roomId : ", c.RoomID)
 
 	m.Lock()
-	defer m.Unlock()
 
 	m.clients[c.UserID] = c
 
@@ -199,13 +200,14 @@ func (m *Manager) addClient(c *Client) {
 
 	m.rooms[c.RoomID][c.UserID] = c
 	fmt.Println("Event user joined")
-	// m.broadcast <- RoomEvent{
-	// 	RoomID: c.RoomID,
-	// 	Event: Event{
-	// 		Type:    "user_joined",
-	// 		Payload: `{"userId": ` + c.UserID + "}",
-	// 	},
-	// }
+	m.Unlock()
+	m.broadcast <- RoomEvent{
+		RoomID: c.RoomID,
+		Event: Event{
+			Type:    "user_joined",
+			Payload: c.UserID,
+		},
+	}
 }
 
 // func (m *Manager) removeClient(c *Client) {
@@ -218,23 +220,31 @@ func (m *Manager) addClient(c *Client) {
 //		}
 //	}
 func (m *Manager) removeClient(c *Client) {
+	fmt.Println("REMOVE CLIENT ..............: ", c.UserID, " roomId : ", c.RoomID)
+
 	m.Lock()
-	defer m.Unlock()
 
 	delete(m.clients, c.UserID)
 	fmt.Println("client disconnected : ", c.UserID)
+	shouldBroadcast := false
 	if room, ok := m.rooms[c.RoomID]; ok {
 		delete(room, c.UserID)
 		if len(room) == 0 {
 			delete(m.rooms, c.RoomID)
 		}
-		// m.broadcast <- RoomEvent{
-		// 	RoomID: c.RoomID,
-		// 	Event: Event{
-		// 		Type:    "user_left",
-		// 		Payload: `{"userId": ` + c.UserID + "}",
-		// 	},
-		// }
+
+		shouldBroadcast = true
+	}
+	m.Unlock()
+
+	if shouldBroadcast {
+		m.broadcast <- RoomEvent{
+			RoomID: c.RoomID,
+			Event: Event{
+				Type:    "user_left",
+				Payload: c.UserID,
+			},
+		}
 	}
 
 }

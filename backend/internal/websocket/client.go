@@ -144,7 +144,7 @@ func (c *Client) WriteMessages() {
 				log.Println("failed to send the message !!", err)
 				return
 			}
-			// log.Println("message sent !!")
+			log.Println("message sent !!")
 
 		case <-ticker.C:
 			log.Println("Ping")
