@@ -3,8 +3,10 @@ package websocket
 // package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 
 	// "fmt"
 
@@ -15,8 +17,10 @@ import (
 
 	// "github.com/SanidhyaMadheshia/ttl-based-chats/backend/internal/lib"
 	// "github.com/SanidhyaMadheshia/ttl-based-chats/backend/internal/middlewares"
+	// "github.com/SanidhyaMadheshia/ttl-based-chats/backend/internal/db"
 	"github.com/SanidhyaMadheshia/ttl-based-chats/backend/internal/db"
 	"github.com/gorilla/websocket"
+	// "github.com/joho/godotenv"
 )
 
 var (
@@ -35,6 +39,7 @@ type RoomEvent struct {
 type Manager struct {
 	clients    ClientList
 	rooms      map[string]ClientList // roomId -> client[]
+	admins     map[string]string
 	register   chan *Client
 	unregister chan *Client
 	broadcast  chan RoomEvent
@@ -49,10 +54,11 @@ func NewManager(rdb *db.RedisClient) *Manager {
 	m := &Manager{
 		rdb:        rdb,
 		clients:    make(ClientList),
-		register:   make(chan *Client, 16),
-		unregister: make(chan *Client, 16),
-		broadcast:  make(chan RoomEvent, 64),
+		register:   make(chan *Client, 64),
+		unregister: make(chan *Client, 64),
+		broadcast:  make(chan RoomEvent, 128),
 		rooms:      make(map[string]ClientList),
+		admins:     make(map[string]string),
 		handlers:   make(map[string]EventHandler),
 	}
 
@@ -174,7 +180,7 @@ func (m *Manager) Run() { // ADDED
 			m.removeClient(client)
 
 		case msg := <-m.broadcast:
-			m.broadcastToRoom(msg.RoomID, msg.Event)
+			m.BroadcastToRoom(msg.RoomID, msg.Event)
 		}
 	}
 }
@@ -192,15 +198,33 @@ func (m *Manager) addClient(c *Client) {
 
 	m.Lock()
 
-	m.clients[c.UserID] = c
-
 	if _, ok := m.rooms[c.RoomID]; !ok {
 		m.rooms[c.RoomID] = make(ClientList)
 	}
 
 	m.rooms[c.RoomID][c.UserID] = c
+	m.clients[c.UserID] = c
 	fmt.Println("Event user joined")
+
+	members := []string{}
+	for userID := range m.rooms[c.RoomID] {
+		// if userID != c.UserID {
+		members = append(members, userID)
+		// }
+	}
+	payloadBytes, _ := json.Marshal(members)
 	m.Unlock()
+	fmt.Println(members)
+	fmt.Println("Broadcasting to all members : addClinet ")
+
+	m.broadcast <- RoomEvent{
+		RoomID: c.RoomID,
+		Event: Event{
+			Type:    "room_members",
+			Payload: string(payloadBytes),
+		},
+	}
+	// for notification !!
 	m.broadcast <- RoomEvent{
 		RoomID: c.RoomID,
 		Event: Event{
@@ -238,6 +262,23 @@ func (m *Manager) removeClient(c *Client) {
 	m.Unlock()
 
 	if shouldBroadcast {
+		members := []string{}
+		for userID := range m.rooms[c.RoomID] {
+			// if userID != c.UserID {
+			members = append(members, userID)
+			// }
+		}
+		payloadBytes, _ := json.Marshal(members)
+		fmt.Println(members)
+		fmt.Println("Broadcasting to all members : addClinet ")
+
+		m.broadcast <- RoomEvent{
+			RoomID: c.RoomID,
+			Event: Event{
+				Type:    "room_members",
+				Payload: string(payloadBytes),
+			},
+		}
 		m.broadcast <- RoomEvent{
 			RoomID: c.RoomID,
 			Event: Event{
@@ -249,7 +290,7 @@ func (m *Manager) removeClient(c *Client) {
 
 }
 
-func (m *Manager) broadcastToRoom(roomID string, event Event) { // ADDED
+func (m *Manager) BroadcastToRoom(roomID string, event Event) { // ADDED
 	m.RLock()
 	defer m.RUnlock()
 
@@ -268,17 +309,67 @@ func (m *Manager) broadcastToRoom(roomID string, event Event) { // ADDED
 	}
 }
 
-func checkOrigin(r *http.Request) bool {
-	origin := r.Header.Get("Origin")
+// func (m *Manager) SendToAdmin()
 
+func (m *Manager) getRoomMembers(roomID string) []string {
+	m.RLock()
+	defer m.RUnlock()
+
+	members := []string{}
+	if room, ok := m.rooms[roomID]; ok {
+		for userID := range room {
+			members = append(members, userID)
+		}
+	}
+	return members
+}
+
+func checkOrigin(r *http.Request) bool {
+	
+	origin := r.Header.Get("Origin")
+	frontendUrl := os.Getenv("FRONTEND_URL")
+	
 	switch origin {
-	case "http://localhost:3000":
+	case "http://" + frontendUrl:
 		return true
 
 	default:
 		return false
 	}
 	// return false
+}
+
+func (m *Manager) SetRoomAdmin(roomID, userID string) {
+	m.Lock()
+	defer m.Unlock()
+	if m.admins == nil {
+		m.admins = make(map[string]string)
+	}
+	m.admins[roomID] = userID
+}
+
+func (m *Manager) SendToAdmin(roomID string, event Event) {
+	m.RLock()
+	defer m.RUnlock()
+
+	adminID, ok := m.admins[roomID]
+	if !ok {
+		log.Println("No admin for room:", roomID)
+		return
+	}
+
+	client, ok := m.clients[adminID]
+	if !ok {
+		log.Println("Admin not connected:", adminID)
+		return
+	}
+
+	select {
+	case client.egress <- event:
+		log.Println("Event sent to admin:", adminID)
+	default:
+		log.Println("Admin's egress full, dropping event")
+	}
 }
 
 // func (m *Manager) ValidateWSConnection()

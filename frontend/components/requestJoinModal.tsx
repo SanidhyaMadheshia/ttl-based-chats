@@ -38,7 +38,7 @@ export function RequestJoinModal({
 
 
       // alert("Request sent to admin , Now Keep reloading , until admin accepts !!")
-      // onRequestSent()
+      onRequestSent()
     } catch {
       alert("Failed to send request")
     } finally {

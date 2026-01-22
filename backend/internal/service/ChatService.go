@@ -470,17 +470,49 @@ func (s *ChatService) GetRole(
 func (s *ChatService) GetRoomExists(
 	ctx context.Context,
 	roomId string,
-) (bool, error) {
+) (bool,string , error) {
 	key := "room:" + roomId
 
 	exists, err := s.rdb.Client.Exists(ctx, key).Result()
+
 	if err != nil {
-		return false, err
+		return false,"", err
+	}
+	roomName, err2 := s.rdb.Client.HGet(ctx , key, "roomName").Result()
+
+	if err != nil {
+		return false,"", err2
 	}
 
-	return exists == 1, nil
+	return exists == 1, roomName , nil
 }
 
+
+func (s *ChatService) GetTTL(
+	ctx context.Context,
+	roomID string ,
+
+) (string, error) {
+	key := "room:" + roomID
+
+	ttl, err := s.rdb.Client.TTL(ctx, key).Result()
+	if err != nil {
+		return "", err
+	}
+
+	// Key does not exist
+	if ttl == -2 {
+		return "key does not exist", nil
+	}
+
+	// Key exists but no expiry
+	if ttl == -1 {
+		return "no expiry", nil
+	}
+
+	// Return seconds as string
+	return ttl.String(), nil
+}	
 //
 // ────────────────────────────────
 // JOIN REQUEST FLOW

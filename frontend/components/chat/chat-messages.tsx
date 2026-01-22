@@ -6,7 +6,7 @@ import { formatDistanceToNow } from "date-fns"
 type Message = {
   id: string
   userId: string
-  userName: string
+  userName?: string
   content: string
   // timestamp: number
   isSystemMessage?: boolean
@@ -14,9 +14,11 @@ type Message = {
 
 interface ChatMessagesProps {
   messages: Message[]
+  userId: string,
+  // isAdmin : boolean
 }
 
-export function ChatMessages({ messages }: ChatMessagesProps) {
+export function ChatMessages({ messages, userId }: ChatMessagesProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -45,7 +47,8 @@ export function ChatMessages({ messages }: ChatMessagesProps) {
               ) : (
                 <div className="group">
                   <div className="flex items-baseline gap-2">
-                    <span className="text-sm font-medium text-foreground">{message.userName}</span>
+                    <span className="text-sm font-medium text-foreground">{userId === message.userId ? "you" : message.userName ?? "unknown"}
+                    </span>
                     {/* <span className="text-xs text-muted-foreground">
                       {formatDistanceToNow(message.timestamp, { addSuffix: true })}
                     </span> */}

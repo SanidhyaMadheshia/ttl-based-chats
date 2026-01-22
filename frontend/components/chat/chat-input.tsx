@@ -45,18 +45,18 @@ export function ChatInput({ onSendMessage, isMuted, onJoinVoice, isUserInVoice, 
         <Button size="sm" variant="ghost" className="px-2" title="Emoji picker">
           <Smile className="h-5 w-5" />
         </Button>
-        <Button size="sm" variant="ghost" className="px-2" title="Mic input">
+        {/* <Button size="sm" variant="ghost" className="px-2" title="Mic input">
           <Mic className="h-5 w-5" />
-        </Button>
-        <Button
+        </Button> */}
+        {/* <Button
           size="sm"
           variant={isUserInVoice ? "destructive" : "ghost"}
           className="px-2"
           onClick={isUserInVoice ? onLeaveVoice : onJoinVoice}
           title={isUserInVoice ? "Leave voice" : "Join voice"}
-        >
-          <Phone className={`h-5 w-5 ${isUserInVoice ? "" : ""}`} />
-        </Button>
+        > */}
+          {/* <Phone className={`h-5 w-5 ${isUserInVoice ? "" : ""}`} /> */}
+        {/* </Button> */}
         <Button size="sm" onClick={handleSend} disabled={!message.trim()} className="gap-2">
           <Send className="h-4 w-4" />
           Send

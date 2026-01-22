@@ -8,6 +8,8 @@ import (
 	"github.com/SanidhyaMadheshia/ttl-based-chats/backend/internal/middlewares"
 	"github.com/SanidhyaMadheshia/ttl-based-chats/backend/internal/service"
 	"github.com/SanidhyaMadheshia/ttl-based-chats/backend/internal/websocket"
+	"github.com/joho/godotenv"
+	// "honnef.co/go/tools/config"
 )
 
 // "github.com/SanidhyaMadheshia/ttl-based-chats/backend/internal/handler"
@@ -18,13 +20,16 @@ func Run() {
 	// repo := repository.NewTodoRepository()
 	// service := service.NewTodoService(repo)
 	// handler := handler.NewTodoHandler(service)
+	godotenv.Load()
+
+	// cfg := config.Load()
 	redis := db.NewRedisClient()
 
 	chatService := service.NewChatService(redis)
 
 	WSmanager := websocket.NewManager(redis)
 
-	handler := handler.NewChatHandler(chatService)
+	handler := handler.NewChatHandler(chatService , WSmanager)
 	middleware := middlewares.NewChatMiddleware(chatService)
 
 	mux := http.NewServeMux()
@@ -42,14 +47,15 @@ func Run() {
 	mux.Handle("/getRequestMembers", middleware.AuthAdminMiddleware(http.HandlerFunc(handler.HandleGetRequestMembers)))
 	mux.Handle("/getRoomMembers", middleware.AuthRoomMemberMiddleware(http.HandlerFunc(handler.HandleGetMembers)))
 	mux.Handle("/validateRole", middleware.AuthRoomMemberMiddleware(http.HandlerFunc(handler.HandleGetRole)))
+	mux.Handle("/getTTL", middleware.AuthRoomMemberMiddleware(http.HandlerFunc(handler.HandleGetTTL)) )
 	mux.Handle("/roomExists", http.HandlerFunc(handler.HandleGetRoomExits))
+	mux.HandleFunc("/ws", WSmanager.ServeWS)
 	// mux.Handle()
 	// mux.Handle("/system-status",http.HandlerFunc(handler))
-	// mux.HandleFunc("/bkcd", handler.HandleCrash)
-	go WSmanager.Run() // Added
+	// mux.HandleFunc("/bkcd", handler.HancheckOrigindleCrash)
 	corsHandler := middlewares.CORS(mux)
+	go WSmanager.Run() // Added
 
-	mux.HandleFunc("/ws", WSmanager.ServeWS)
 	http.ListenAndServe(":8080", corsHandler)
 	// return &http.Server{
 	// 	Addr:    ":8080",

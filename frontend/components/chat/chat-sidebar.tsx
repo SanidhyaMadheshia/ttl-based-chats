@@ -29,12 +29,14 @@ interface ChatSidebarProps {
   onRejectRequest: (index: string) => void
   onMuteVoiceUser: (userId: string) => void
   onRemoveVoiceUser: (userId: string) => void
+  onlineMembers: string[]
   requestMembers: RequestMember[]
   role: string
   isUserInVoice: boolean
 }
 
 export function ChatSidebar({
+  onlineMembers,
   requestMembers,
   role,
   users,
@@ -117,7 +119,7 @@ export function ChatSidebar({
       )}
 
 
-      {voiceUsers.length > 0 && (
+      {/* {voiceUsers.length > 0 && (
         <div className="mb-6">
           <div className="flex items-center gap-2 mb-3">
             <Mic className="h-4 w-4 text-accent" />
@@ -162,6 +164,35 @@ export function ChatSidebar({
             ))}
           </div>
         </div>
+      )} */}
+
+      {onlineMembers.length > 0 && (
+        <div className="mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <Users className="h-4 w-4 text-green-500" />
+            <h2 className="text-sm font-semibold text-foreground">
+              Online ({onlineMembers.length})
+            </h2>
+          </div>
+
+          <div className="space-y-2">
+            {onlineMembers.map((memberId) => {
+              const member = users.find(u => u.id === memberId)
+
+              return (
+                <div
+                  key={memberId}
+                  className="flex items-center gap-2 rounded-lg bg-green-500/10 border border-green-500/20 px-3 py-2"
+                >
+                  <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                  <span className="text-sm text-foreground truncate">
+                    {member?.name ?? "Unknown user"}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
       )}
 
       <div className="mb-6">
@@ -194,11 +225,6 @@ export function ChatSidebar({
           ))}
         </div>
       </div>
-
-      <Button variant="outline" className="w-full bg-transparent" size="sm">
-        <LogOut className="h-4 w-4 mr-2" />
-        Leave Chat
-      </Button>
     </aside>
   )
 }

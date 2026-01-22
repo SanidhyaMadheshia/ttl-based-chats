@@ -14,8 +14,8 @@ type Message = {
   isSystemMessage?: boolean
 }
 interface messagePayload {
-    userId :  string 
-    payload : string 
+  userId: string
+  payload: string
 }
 
 type User = {
@@ -24,19 +24,24 @@ type User = {
   isAdmin: boolean
 }
 
-export function messageParser(payload : string, users : User[] ) : Message {
+export function messageParser(payload: any, users: Map<string, User>) {
 
-    const message : messagePayload = JSON.parse(payload )
-    const user = users.find((user, id)=> {
-        return user.id === message.userId
-    })
-    console.log(users)
-    const resMesaage : Message = {
-        id : Math.random().toString(),
-        userId : message.userId,
-        userName : user?.name ? user.name : "unknown", 
-        content : message.payload,
+  console.log(payload)
+  const data = typeof payload === "string" ? JSON.parse(payload) : payload
 
-    }
-    return resMesaage
+  return {
+    id: crypto.randomUUID(),
+    userId: data.userId,
+    userName: users.get(data.userId)?.name ?? "unknown",
+    content: data.payload,
+    isSystemMessage: false
+  }
+}
+
+
+export function membersParser(payload: string, setOnlineMembers : React.Dispatch<React.SetStateAction<string[]>>) {
+  const members : string[] = JSON.parse(payload)
+  console.log("online Members :", members)
+  setOnlineMembers(members)
+  return 
 }

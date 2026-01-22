@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"time"
 
 	"github.com/SanidhyaMadheshia/ttl-based-chats/backend/internal/middlewares"
 	"github.com/SanidhyaMadheshia/ttl-based-chats/backend/internal/service"
+	"github.com/SanidhyaMadheshia/ttl-based-chats/backend/internal/websocket"
 )
 
 type CreateRoomRespose struct {
@@ -20,6 +22,7 @@ type CreateRoomRespose struct {
 
 type ChatHandler struct {
 	chatService *service.ChatService
+	wsManager   *websocket.Manager
 }
 type SaveMessageRequest struct {
 	RoomID   string  `json:"roomId"`
@@ -28,9 +31,10 @@ type SaveMessageRequest struct {
 	UserID   string  `json:"userId"`
 }
 
-func NewChatHandler(chatService *service.ChatService) *ChatHandler {
+func NewChatHandler(chatService *service.ChatService, wsManager *websocket.Manager) *ChatHandler {
 	return &ChatHandler{
 		chatService: chatService,
+		wsManager:   wsManager,
 	}
 }
 
@@ -51,7 +55,7 @@ func (h *ChatHandler) HandleSaveMessage(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "invalid json", http.StatusBadRequest)
 		return
 	}
-	
+
 	err2 := h.chatService.SaveRoomMessage(ctx, req.RoomID, *req.Message, req.UserID, time.Minute)
 
 	if err2 != nil {
@@ -90,6 +94,7 @@ func (h *ChatHandler) HandleCreateRoom(w http.ResponseWriter, r *http.Request) {
 	}
 	// resJSon := `{"chatID":"` + chatID + `"}`
 
+	h.wsManager.SetRoomAdmin(chatID, adminId)
 	res := &CreateRoomRespose{
 		ChatID:  chatID,
 		UserKey: adminKey,
@@ -275,7 +280,22 @@ func (h *ChatHandler) HandleRequestToJoin(w http.ResponseWriter, r *http.Request
 		)
 		return
 	}
+	payloadBytes, err := json.Marshal(struct {
+		Username string `json:"username"`
+		UserID   string `json:"userId"`
+	}{
+		Username: req.Username,
+		UserID:   memberId,
+	})
 
+	if err != nil {
+		log.Println("failed to marshal payload:", err)
+		return
+	}
+	h.wsManager.SendToAdmin(req.RoomID, websocket.Event{
+		Type:    "REQUEST_TO_JOIN",
+		Payload: string(payloadBytes),
+	})
 	res := struct {
 		MemberKey string `json:"userKey"`
 		MemberId  string `json:"userId"`
@@ -331,6 +351,19 @@ func (h *ChatHandler) HandleJoinRoom(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
+
+	users, err2 := h.chatService.GetChatRoomMembers(ctx, req.RoomID)
+
+	if err2 != nil {
+		http.Error(w, "failed to fetch users", http.StatusInternalServerError)
+		return
+	}
+	payload, _ := json.Marshal(users)
+
+	h.wsManager.BroadcastToRoom(req.RoomID, websocket.Event{
+		Type:    "room_users_updated",
+		Payload: string(payload),
+	})
 
 	w.WriteHeader(http.StatusOK)
 	w.Write(
@@ -390,14 +423,11 @@ func (h *ChatHandler) HandleGetRole(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func (h *ChatHandler) HandleGetRoomExits(w http.ResponseWriter , r *http.Request) {
+func (h *ChatHandler) HandleGetRoomExits(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	roomId := r.URL.Query().Get("roomId")
 
-
-
-	exists,err:= h.chatService.GetRoomExists(ctx, roomId)
-
+	exists, roomName, err := h.chatService.GetRoomExists(ctx, roomId)
 
 	if err != nil {
 		fmt.Println("error in roomExists", err)
@@ -405,15 +435,58 @@ func (h *ChatHandler) HandleGetRoomExits(w http.ResponseWriter , r *http.Request
 	}
 	res := struct {
 		Exists bool `json:"exists"`
+		RoomName string `json:"roomName"`
 	}{
 		Exists: exists,
+		RoomName: roomName,
 	}
 
-	resJson, _:= json.Marshal(res)
+	resJson, _ := json.Marshal(res)
 	w.Header().Set("Content-Type", "application/json")
 	// w.Write([]byte(resJson))
 	w.WriteHeader(http.StatusOK)
 	w.Write(
 		resJson,
 	)
+}
+
+func (h *ChatHandler) HandleGetTTL(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+	var req struct {
+		RoomID string `json:"roomId"`
+		// MemberKey string `json:"memberKey"`
+	}
+
+	if err := json.Unmarshal(bodyBytes, &req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+
+	ttl, _ := h.chatService.GetTTL(ctx, req.RoomID)
+
+	fmt.Println("ttl time --------------> ", ttl)
+
+	res := struct {
+		TTL string `json:"TTL"`
+	}{
+		TTL: ttl,
+	}
+
+	resJson, _ := json.Marshal(res)
+	w.Header().Set("Content-Type", "application/json")
+	// w.Write([]byte(resJson))
+
+	w.WriteHeader(http.StatusOK)
+	w.Write(
+		resJson,
+	)
+
 }

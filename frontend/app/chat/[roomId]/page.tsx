@@ -8,6 +8,8 @@ import { ChatInput } from "@/components/chat/chat-input"
 import { VoiceModal } from "@/components/chat/voice-modal"
 import axios from "axios"
 import { RequestJoinModal } from "@/components/requestJoinModal"
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
+import { AppSidebar } from "@/components/app-sidebar"
 
 type User = {
   id: string
@@ -25,17 +27,18 @@ type VoiceUser = {
 type Message = {
   id: string
   userId: string
-  userName: string
+  userName?: string
   content: string
-  // timestamp: number
   isSystemMessage?: boolean
 }
+
 
 interface RoleRequest {
   role: string;
 }
 interface roomExists {
   exists: boolean
+  roomName : string 
 }
 
 
@@ -45,12 +48,13 @@ interface roomExists {
 
 import { useRouter } from "next/navigation"
 import { RequestMember } from "@/lib/types"
-import { messageParser } from "@/lib/wsEventParser"
+import { membersParser, messageParser } from "@/lib/wsEventParser"
 
 
 export default function ChatRoom({ params }: { params: Promise<{ roomId: string }> }) {
   const { roomId } = use(params)
   const [ttl, setTtl] = useState(3600)
+
   const [messages, setMessages] = useState<Message[]>([])
   const [users, setUsers] = useState<User[]>([
     { id: "1", name: "You", isAdmin: true },
@@ -73,81 +77,17 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
   const wsRef = useRef<WebSocket | null>(null)
   const [showRequestModal, setShowRequestModal] = useState(false)
   const [requestMembers, setRequestMembers] = useState<RequestMember[]>([])
+  const [onlineMembers, setOnlineMembers] = useState<string[]>([]);
+  const pendingMessagesRef = useRef<any[]>([])
+  const [roomName , setRoomName] = useState<string>("");
   const usersRef = useRef<User[]>([])
+  const usersRefMap = useRef<Map<string, User>>(new Map())
 
-
-
+  const [roomReady , setRoomReady] = useState<boolean>(false) 
   const router = useRouter()
 
 
   var ws;
-  // useEffect(() => {
-  //   const uid = localStorage.getItem("userId")
-  //   const userKey = localStorage.getItem("userKey")
-
-  //   if (!uid || !userKey) {
-  //     console.log(uid, userKey)
-  //     setShowRequestModal(true)
-  //     return
-  //   }
-  //   var exists = false ;
-
-  //   setUserId(uid)
-  //   async function roomExists() {
-  //     const res = await axios.get<roomExists>(`${process.env.NEXT_PUBLIC_BACKEND_URL}/roomExists?roomId=${roomId}`)
-  //     console.log(res.data)
-  //     if(!res.data) {
-  //       return false 
-  //     }
-  //     if(!res.data.exists)  {
-  //       console.log("not exits")
-  //       router.replace(`/chat/${roomId}/not-found`)
-  //       // return res.data.exists
-  //     } 
-  //     exists= res.data.exists
-  //     console.log(exists)
-  //   }
-
-  //   async function validateRole() {
-  //     try {
-  //       const res = await axios.post<RoleRequest>(
-  //         `${process.env.NEXT_PUBLIC_BACKEND_URL}/validateRole`,
-  //         {
-  //           userId: uid,
-  //           userKey,
-  //           roomId
-  //         }
-  //       )
-  //       console.log(res.data)
-  //       if (!res.data.role) {
-  //         setShowRequestModal(true)
-  //         setRole("")
-  //         return
-  //       }
-  //       console.log(userId, role, userKey)
-  //       if (res.data.role === "memberPending") {
-  //         console.log("hello redirect ")
-  //         router.replace(`/chat/${roomId}/waiting`)
-  //         return
-  //       }
-
-  //       setRole(res.data.role)
-  //       setShowRequestModal(false)
-  //     } catch (err) {
-  //       setShowRequestModal(true)
-  //       // console.error("Role validation failed")
-  //       return 
-  //     }
-  //   }
-  //   roomExists()
-  //   console.log(exists)
-  //   if (!exists) {
-  //     console.log("before validate ")
-  //     return 
-  //   }
-  //   console.log("just before validate ")
-  //   validateRole()
-  // }, [roomId])
 
   useEffect(() => {
     if (!roomId) return
@@ -165,18 +105,24 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
 
     const init = async () => {
       try {
-        // 1️⃣ Check room existence
         const roomRes = await axios.get<roomExists>(
           `${process.env.NEXT_PUBLIC_BACKEND_URL}/roomExists`,
           { params: { roomId } }
         )
+
+        console.log(roomRes);
+
 
         if (!roomRes.data?.exists) {
           router.replace(`/chat/${roomId}/not-found`)
           return
         }
 
-        // 2️⃣ Validate role
+        setRoomName(roomRes.data.roomName);
+
+        console.log("roomName : ",  roomRes.data.roomName)
+        setRoomReady(true)
+
         const roleRes = await axios.post<RoleRequest>(
           `${process.env.NEXT_PUBLIC_BACKEND_URL}/validateRole`,
           {
@@ -201,7 +147,6 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
         setShowRequestModal(false)
       } catch (err: any) {
         setShowRequestModal(true)
-        // console.error("Init failed:", err.response?.data || err.message)
       }
     }
 
@@ -236,9 +181,16 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
         }
       )
       if (!res.data) return
+      usersRef.current = res.data
+      const map = new Map<string, User>()
+      res.data.forEach(u => map.set(u.id, u))
+
+      usersRefMap.current = map
+      // setUsers(res.data)
 
       setUsers(res.data)
     }
+    getTtl()
     async function getChats() {
       interface resChat {
         userId: string,
@@ -253,38 +205,43 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
         }
       )
       if (!res.data) return;
-      const messages: Message[] = res.data.map((chat, id) => {
-        var r: Message = {
-          id: id.toString(),
-          userId: chat.userId,
-          userName: "unkown",
-          content: chat.payload,
-          isSystemMessage: false
-
-        }
-        return r
+      const messages: Message[] = res.data.map((chat, id) => ({
+        id: id.toString(),
+        userId: chat.userId,
+        content: chat.payload,
+        isSystemMessage: false
+      }))
 
 
-      })
       setMessages(messages)
 
     }
 
+    async function getTtl() {
+      const ttlRes = await axios.post<{
+        TTL: string
+      }>(`${process.env.NEXT_PUBLIC_BACKEND_URL}/getTTL`, {
+        roomId: roomId,
+        userId,
+        userKey: key
+      });
+      if (!ttlRes.data) return;
+      const ttlR = parseTTL(ttlRes.data.TTL)
+      setTtl(ttlR!);
+      console.log(ttlR);
+    }
 
   }, [role])
 
   useEffect(() => {
     const interval = setInterval(() => {
+      console.log(ttl);
       setTtl((prev) => (prev > 0 ? prev - 1 : 0))
     }, 1000)
 
-    // ws  = new WebSocket(process.env.NEXT_PUBLIC_BACKEND_URL! + "/ws?userId=" +userId + "&roomId" + roomId );
-    // ws.onopen(())
-
     return () => clearInterval(interval)
 
-  }, [])
-
+  }, [ttl])
 
   useEffect(() => {
     if (!userId || !roomId || !role) return
@@ -304,31 +261,14 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
 
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data)
+      if (usersRef.current.length === 0) {
+        pendingMessagesRef.current.push(data)
+        return
+      }
+
       console.log(data)
       // setMessages((prev) => [...prev, messageParser(data.payload)])
-      switch (data.type) {
-        case "message":
-          var newMessage = messageParser(data.payload, usersRef.current)
-          if (newMessage.userId === userId) break;
-          setMessages((prev) => [...prev, newMessage])
-          break
-
-        case "user_joined":
-          console.log(`${data.payload} joined`)
-
-          break
-
-        case "user_left":
-
-          console.log(`${data.payload} left`)
-
-          break
-
-        case "room_closed":
-          
-          ws.close()
-          break
-      }
+      handleWsEvent(data)
     }
 
     ws.onerror = (err) => {
@@ -345,10 +285,98 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
       ws.close()
     }
   }, [role, userId, roomId])
+
+  function handleWsEvent(data: any) {
+    switch (data.type) {
+      case "message":
+        const msg = messageParser(data.payload, usersRefMap.current)
+        if (msg.userId !== userId) {
+          setMessages(prev => [...prev, msg])
+        }
+        break
+
+      case "room_members":
+        membersParser(data.payload, setOnlineMembers)
+        break
+
+      case "room_users_updated":
+        const users = JSON.parse(data.payload)
+        console.log("room user update : ", users)
+        usersRef.current = users
+        const map = new Map<string, User>()
+        users.forEach((u: User) => map.set(u.id, u))
+
+        usersRefMap.current = map
+        // setUsers(users)
+
+
+        setUsers(users)
+        break
+      case "REQUEST_TO_JOIN":
+        // request to join 
+        console.log("request to join !!")
+        const payload =
+          typeof data.payload === "string"
+            ? JSON.parse(data.payload)
+            : data.payload
+        const newRequest: RequestMember = {
+          id: payload.userId,
+          name: payload.username,
+        }
+
+        setRequestMembers(prev => {
+          // prevent duplicates (refresh / reconnect safety)
+          if (prev.some(m => m.id === newRequest.id)) return prev
+          return [...prev, newRequest]
+        });
+
+    }
+  }
+
   useEffect(() => {
-    usersRef.current = users
+    if (users.length === 0) return
+
+    const queue = pendingMessagesRef.current
+    pendingMessagesRef.current = []
+
+    queue.forEach(handleWsEvent)
   }, [users])
 
+  useEffect(() => {
+    if (usersRefMap.current.size === 0) return
+
+    setMessages(prev =>
+      prev.map(msg => {
+        if (msg.isSystemMessage) return msg
+        if (msg.userName) return msg   // already resolved
+
+        return {
+          ...msg,
+          userName: usersRefMap.current.get(msg.userId)?.name ?? "unknown",
+        }
+      })
+    )
+  }, [users])
+
+  const parseTTL = (ttl: string): number | null => {
+    if (!ttl) return null
+
+    if (ttl === "no expiry" || ttl === "key does not exist") {
+      return null
+    }
+
+    let seconds = 0
+
+    const h = ttl.match(/(\d+)h/)
+    const m = ttl.match(/(\d+)m/)
+    const s = ttl.match(/(\d+)s/)
+
+    if (h) seconds += Number(h[1]) * 3600
+    if (m) seconds += Number(m[1]) * 60
+    if (s) seconds += Number(s[1])
+
+    return seconds
+  }
 
   const formatTime = (seconds: number) => {
     const hours = Math.floor(seconds / 3600)
@@ -391,6 +419,13 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
     }
     approveRequest(index)
 
+    setRequestMembers((RMembers) => {
+      return RMembers.filter((val) => {
+        return val.id != index
+      })
+    });
+
+
     requestMembers.filter((val, i) => {
       return val.id !== index;
     })
@@ -419,10 +454,11 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
       ...prev,
       {
         id: Math.random().toString(),
-        userId: "1",
-        userName: "You",
+        userId: userId,
+        userName: usersRefMap.current.get(userId)?.name ?? "You",
         content,
-      },
+      }
+      ,
     ])
   }
 
@@ -494,10 +530,11 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
         className={`flex h-full flex-col transition-all ${showRequestModal ? "pointer-events-none blur-sm" : ""
           }`}
       >
-        <ChatHeader roomId={roomId} ttl={ttl} formattedTime={formatTime(ttl)} />
+        {roomReady && <ChatHeader roomId={roomId} roomName={roomName} ttl={ttl} formattedTime={formatTime(ttl)} />}
 
         <div className="flex flex-1 overflow-hidden">
           <ChatSidebar
+            onlineMembers={onlineMembers}
             requestMembers={requestMembers}
             users={users}
             role={role}
@@ -513,7 +550,12 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
           />
 
           <div className="flex flex-1 flex-col">
-            <ChatMessages messages={messages} />
+            <ChatMessages
+              messages={messages}
+              // isAdmin={role==="admin" ? true : false}
+              userId={userId}
+
+            />
             <ChatInput
               onSendMessage={handleSendMessage}
               isMuted={isMuted}
@@ -529,7 +571,9 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
       {showRequestModal && (
         <RequestJoinModal
           roomId={roomId}
-          onRequestSent={() => { }}
+          onRequestSent={() => {
+            router.push(`${roomId}/waiting`)
+          }}
         />
       )}
     </div>

@@ -45,7 +45,7 @@ func NewClient(conn *websocket.Conn, manager *Manager, userId string, roomId str
 		connection: conn,
 		manager:    manager,
 		// egress:     make(chan []byte),
-		egress:   make(chan Event),
+		egress:   make(chan Event, 64),
 		JoinedAt: time.Now(),
 	}
 }
