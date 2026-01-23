@@ -8,8 +8,8 @@ import { ChatInput } from "@/components/chat/chat-input"
 import { VoiceModal } from "@/components/chat/voice-modal"
 import axios from "axios"
 import { RequestJoinModal } from "@/components/requestJoinModal"
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
-import { AppSidebar } from "@/components/app-sidebar"
+import { Sidebar, SidebarContent, SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
+// import { AppSidebar } from "@/components/app-sidebar"
 
 type User = {
   id: string
@@ -38,7 +38,7 @@ interface RoleRequest {
 }
 interface roomExists {
   exists: boolean
-  roomName : string 
+  roomName: string
 }
 
 
@@ -49,6 +49,7 @@ interface roomExists {
 import { useRouter } from "next/navigation"
 import { RequestMember } from "@/lib/types"
 import { membersParser, messageParser } from "@/lib/wsEventParser"
+// import { Sidebar } from "lucide-react"
 
 
 export default function ChatRoom({ params }: { params: Promise<{ roomId: string }> }) {
@@ -79,11 +80,11 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
   const [requestMembers, setRequestMembers] = useState<RequestMember[]>([])
   const [onlineMembers, setOnlineMembers] = useState<string[]>([]);
   const pendingMessagesRef = useRef<any[]>([])
-  const [roomName , setRoomName] = useState<string>("");
+  const [roomName, setRoomName] = useState<string>("");
   const usersRef = useRef<User[]>([])
   const usersRefMap = useRef<Map<string, User>>(new Map())
 
-  const [roomReady , setRoomReady] = useState<boolean>(false) 
+  const [roomReady, setRoomReady] = useState<boolean>(false)
   const router = useRouter()
 
 
@@ -120,7 +121,7 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
 
         setRoomName(roomRes.data.roomName);
 
-        console.log("roomName : ",  roomRes.data.roomName)
+        console.log("roomName : ", roomRes.data.roomName)
         setRoomReady(true)
 
         const roleRes = await axios.post<RoleRequest>(
@@ -277,6 +278,8 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
 
     ws.onclose = () => {
       console.log("WebSocket closed")
+      router.push(`${roomId}/not-found`);
+      
     }
 
     wsRef.current = ws
@@ -329,6 +332,38 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
           if (prev.some(m => m.id === newRequest.id)) return prev
           return [...prev, newRequest]
         });
+
+      case "removed_room_member": {
+        const payload = data.payload
+
+        const removedUserId = payload
+
+        // 1️⃣ If *current user* is removed → kick / redirect
+        if (removedUserId === userId) {
+          console.warn("You were removed from the room")
+
+          wsRef.current?.close()
+          router.replace("/") // or /kicked / lobby
+          return
+        }
+
+        // 2️⃣ Remove from users list
+        setUsers(prev => prev.filter(u => u.id !== removedUserId))
+
+        // 3️⃣ Remove from online members
+        setOnlineMembers(prev =>
+          prev.filter(m => m !== removedUserId)
+        )
+
+        // 4️⃣ Update refs (VERY IMPORTANT)
+        usersRef.current = usersRef.current.filter(
+          u => u.id !== removedUserId
+        )
+
+        usersRefMap.current.delete(removedUserId)
+
+        break
+      }
 
     }
   }
@@ -389,6 +424,17 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
   }
 
   const handleRemoveUser = (userId: string) => {
+    async function removeUser(removeUserId: string) {
+      await axios.post(`${process.env.NEXT_PUBLIC_BACKEND_URL}/removeUser`, {
+        roomId,
+        adminId: userId,
+        adminKey: key,
+        removeUserId: removeUserId
+      });
+
+
+    }
+    removeUser(userId)
     setUsers((prev) => prev.filter((u) => u.id !== userId))
     setMessages((prev) => [
       ...prev,
@@ -522,61 +568,150 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
     ])
   }
 
+  // return (
+  //   <SidebarProvider>
+  //     <div className="h-screen w-screen bg-background overflow-hidden">
+
+  //       {/* CHAT UI */}
+  //       <div
+  //         className={`flex h-full flex-col transition-all ${showRequestModal ? "pointer-events-none blur-sm" : ""
+  //           }`}
+  //       >
+  //         {roomReady && <ChatHeader roomId={roomId} roomName={roomName} ttl={ttl} formattedTime={formatTime(ttl)} />}
+
+  //         <div className="flex flex-1 overflow-hidden">
+  //           {/* <SidebarTrigger /> */}
+  //           <Sidebar className="overflow-hidden">
+  //             <SidebarContent className="h-full overflow-y-auto overflow-x-hidden">
+
+
+  //               <ChatSidebar
+  //                 onlineMembers={onlineMembers}
+  //                 requestMembers={requestMembers}
+  //                 users={users}
+  //                 role={role}
+  //                 voiceUsers={voiceUsers}
+  //                 pendingRequests={pendingRequests}
+  //                 onRemoveUser={handleRemoveUser}
+  //                 onMuteUser={handleMuteUser}
+  //                 onApproveRequest={handleApproveRequest}
+  //                 onRejectRequest={handleRejectRequest}
+  //                 onMuteVoiceUser={handleMuteVoiceUser}
+  //                 onRemoveVoiceUser={handleRemoveVoiceUser}
+  //                 isUserInVoice={isUserInVoice}
+  //               />
+  //             </SidebarContent>
+  //           </Sidebar>
+
+  //           <div className="flex flex-1 flex-col overflow-hidden">
+  //             <ChatMessages
+  //               messages={messages}
+  //               // isAdmin={role==="admin" ? true : false}
+  //               userId={userId}
+
+  //             />
+  //             <ChatInput
+  //               onSendMessage={handleSendMessage}
+  //               isMuted={isMuted}
+  //               onJoinVoice={handleJoinVoice}
+  //               isUserInVoice={false}
+  //               onLeaveVoice={handleLeaveVoice}
+  //             />
+  //           </div>
+  //         </div>
+  //       </div>
+
+  //       {/* REQUEST MODAL */}
+  //       {showRequestModal && (
+  //         <RequestJoinModal
+  //           roomId={roomId}
+  //           onRequestSent={() => {
+  //             router.push(`${roomId}/waiting`)
+  //           }}
+  //         />
+  //       )}
+  //     </div>
+  //   </SidebarProvider>
+  // )
   return (
-    <div className="relative h-screen bg-background">
+    <SidebarProvider>
+      <div className="h-screen w-screen bg-background overflow-hidden">
 
-      {/* CHAT UI */}
-      <div
-        className={`flex h-full flex-col transition-all ${showRequestModal ? "pointer-events-none blur-sm" : ""
-          }`}
-      >
-        {roomReady && <ChatHeader roomId={roomId} roomName={roomName} ttl={ttl} formattedTime={formatTime(ttl)} />}
+        {/* CHAT UI */}
+        <div
+          className={`flex h-full flex-col ${showRequestModal ? "pointer-events-none blur-sm" : ""
+            }`}
+        >
+          <div className="flex flex-1 overflow-hidden">
 
-        <div className="flex flex-1 overflow-hidden">
-          <ChatSidebar
-            onlineMembers={onlineMembers}
-            requestMembers={requestMembers}
-            users={users}
-            role={role}
-            voiceUsers={voiceUsers}
-            pendingRequests={pendingRequests}
-            onRemoveUser={handleRemoveUser}
-            onMuteUser={handleMuteUser}
-            onApproveRequest={handleApproveRequest}
-            onRejectRequest={handleRejectRequest}
-            onMuteVoiceUser={handleMuteVoiceUser}
-            onRemoveVoiceUser={handleRemoveVoiceUser}
-            isUserInVoice={isUserInVoice}
-          />
+            {/* SIDEBAR */}
+            <Sidebar className="overflow-hidden">
+              <SidebarContent className="h-full overflow-y-auto overflow-x-hidden">
+                <ChatSidebar
+                  onlineMembers={onlineMembers}
+                  requestMembers={requestMembers}
+                  users={users}
+                  role={role}
+                  voiceUsers={voiceUsers}
+                  pendingRequests={pendingRequests}
+                  onRemoveUser={handleRemoveUser}
+                  onMuteUser={handleMuteUser}
+                  onApproveRequest={handleApproveRequest}
+                  onRejectRequest={handleRejectRequest}
+                  onMuteVoiceUser={handleMuteVoiceUser}
+                  onRemoveVoiceUser={handleRemoveVoiceUser}
+                  isUserInVoice={isUserInVoice}
+                />
+              </SidebarContent>
+            </Sidebar>
 
-          <div className="flex flex-1 flex-col">
-            <ChatMessages
-              messages={messages}
-              // isAdmin={role==="admin" ? true : false}
-              userId={userId}
+            {/* MAIN AREA (HEADER + CHAT) */}
+            <SidebarInset className="flex flex-1 flex-col overflow-hidden">
 
-            />
-            <ChatInput
-              onSendMessage={handleSendMessage}
-              isMuted={isMuted}
-              onJoinVoice={handleJoinVoice}
-              isUserInVoice={false}
-              onLeaveVoice={handleLeaveVoice}
-            />
+              {/* HEADER — MUST BE HERE */}
+              {roomReady && (
+                <ChatHeader
+                  roomId={roomId}
+                  roomName={roomName}
+                  ttl={ttl}
+                  formattedTime={formatTime(ttl)}
+                />
+              )}
+
+              {/* CHAT */}
+              <div className="flex flex-1 flex-col overflow-hidden">
+                <div className="flex-1 overflow-y-auto">
+                  <ChatMessages
+                    messages={messages}
+                    userId={userId}
+                  />
+                </div>
+
+                <ChatInput
+                  onSendMessage={handleSendMessage}
+                  isMuted={isMuted}
+                  onJoinVoice={handleJoinVoice}
+                  isUserInVoice={false}
+                  onLeaveVoice={handleLeaveVoice}
+                />
+              </div>
+
+            </SidebarInset>
           </div>
         </div>
-      </div>
 
-      {/* REQUEST MODAL */}
-      {showRequestModal && (
-        <RequestJoinModal
-          roomId={roomId}
-          onRequestSent={() => {
-            router.push(`${roomId}/waiting`)
-          }}
-        />
-      )}
-    </div>
+        {/* REQUEST MODAL */}
+        {showRequestModal && (
+          <RequestJoinModal
+            roomId={roomId}
+            onRequestSent={() => {
+              router.push(`${roomId}/waiting`)
+            }}
+          />
+        )}
+      </div>
+    </SidebarProvider>
   )
+
 
 }

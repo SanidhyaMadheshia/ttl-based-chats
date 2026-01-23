@@ -213,12 +213,12 @@ export function ChatSidebar({
               </div>
               {isAdmin && !user.isAdmin && (
                 <div className="hidden gap-1 group-hover:flex">
-                  <Button size="sm" variant="ghost" className="h-5 w-5 p-0" onClick={() => onMuteUser(user.id)}>
+                  {/* <Button size="sm" variant="ghost" className="h-5 w-5 p-0" onClick={() => onMuteUser(user.id)}>
                     <MicOff className="h-3 w-3" />
-                  </Button>
-                  <Button size="sm" variant="ghost" className="h-5 w-5 p-0" onClick={() => onRemoveUser(user.id)}>
+                  </Button> */}
+                  {/* <Button size="sm" variant="ghost" className="h-5 w-5 p-0" onClick={() => onRemoveUser(user.id)}>
                     <Trash2 className="h-3 w-3 text-destructive" />
-                  </Button>
+                  </Button> */}
                 </div>
               )}
             </div>

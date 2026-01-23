@@ -48,6 +48,7 @@ func Run() {
 	mux.Handle("/getRoomMembers", middleware.AuthRoomMemberMiddleware(http.HandlerFunc(handler.HandleGetMembers)))
 	mux.Handle("/validateRole", middleware.AuthRoomMemberMiddleware(http.HandlerFunc(handler.HandleGetRole)))
 	mux.Handle("/getTTL", middleware.AuthRoomMemberMiddleware(http.HandlerFunc(handler.HandleGetTTL)) )
+	mux.Handle("/removeUser" , middleware.AuthAdminMiddleware(http.HandlerFunc(handler.HandleRemoveUser)))
 	mux.Handle("/roomExists", http.HandlerFunc(handler.HandleGetRoomExits))
 	mux.HandleFunc("/ws", WSmanager.ServeWS)
 	// mux.Handle()

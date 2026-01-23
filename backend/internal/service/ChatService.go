@@ -373,7 +373,7 @@ func (s *ChatService) CreateChatRoom(
 	pipe.Set(ctx, memberKeyKey, adminKey, ttl)
 	pipe.RPush(ctx, messageKey, "__init__")
 	pipe.LPop(ctx, messageKey)
-	pipe.Expire(ctx , messageKey , ttl)
+	pipe.Expire(ctx, messageKey, ttl)
 	pipe.Expire(ctx, roomKey, ttl)
 	pipe.Expire(ctx, memberSetKey, ttl)
 
@@ -470,27 +470,26 @@ func (s *ChatService) GetRole(
 func (s *ChatService) GetRoomExists(
 	ctx context.Context,
 	roomId string,
-) (bool,string , error) {
+) (bool, string, error) {
 	key := "room:" + roomId
 
 	exists, err := s.rdb.Client.Exists(ctx, key).Result()
 
 	if err != nil {
-		return false,"", err
+		return false, "", err
 	}
-	roomName, err2 := s.rdb.Client.HGet(ctx , key, "roomName").Result()
+	roomName, err2 := s.rdb.Client.HGet(ctx, key, "roomName").Result()
 
 	if err != nil {
-		return false,"", err2
+		return false, "", err2
 	}
 
-	return exists == 1, roomName , nil
+	return exists == 1, roomName, nil
 }
-
 
 func (s *ChatService) GetTTL(
 	ctx context.Context,
-	roomID string ,
+	roomID string,
 
 ) (string, error) {
 	key := "room:" + roomID
@@ -512,7 +511,8 @@ func (s *ChatService) GetTTL(
 
 	// Return seconds as string
 	return ttl.String(), nil
-}	
+}
+
 //
 // ────────────────────────────────
 // JOIN REQUEST FLOW
@@ -574,7 +574,7 @@ func (s *ChatService) ApproveRoomMember(
 type MemberDetail struct {
 	ID      string `json:"id"`
 	Name    string `json:"name"`
-	IsAdmin bool `json:"isAdmin"`
+	IsAdmin bool   `json:"isAdmin"`
 }
 
 func (s *ChatService) GetChatRoomMembers(
@@ -590,7 +590,6 @@ func (s *ChatService) GetChatRoomMembers(
 	key := "room:" + roomID
 	adminKey, err := s.rdb.Client.HGet(ctx, key, "adminId").Result()
 
-
 	result := make([]MemberDetail, 0, len(members))
 
 	for _, memberID := range members {
@@ -600,9 +599,9 @@ func (s *ChatService) GetChatRoomMembers(
 			continue
 		}
 		result = append(result, MemberDetail{
-			ID:   memberID,
-			Name: name,
-			IsAdmin: memberID== adminKey,
+			ID:      memberID,
+			Name:    name,
+			IsAdmin: memberID == adminKey,
 		})
 	}
 
@@ -667,7 +666,7 @@ func (s *ChatService) SaveRoomMessage(
 				"timestamp": now,
 				"message":   message,
 				// "username":  username,
-				"userId":    userID,
+				"userId": userID,
 			},
 		})
 		pipe.Expire(ctx, streamKey, ttl)
@@ -728,4 +727,40 @@ func (s *ChatService) GetChatRoomAllMessage(
 	}
 
 	return messages, nil
+}
+
+// func (s *ChatService) RemoveUser(
+// 	ctx context.Context,
+// 	roomId string,
+// 	removeUserId string,
+// ) error {
+
+// }
+
+func (s *ChatService) RemoveUser(
+	ctx context.Context,
+	roomId string,
+	removeUserId string,
+) error {
+
+	memberSetKey := "room:members:" + roomId
+	requestSetKey := "room:request:" + roomId
+	nameKey := "room:memberName:" + roomId + ":" + removeUserId
+	// roomKey := "room:" + roomId
+	fmt.Println("removing User--------------------> userId ", removeUserId)
+	_, err := s.rdb.Client.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+
+		// Remove from active members
+		pipe.SRem(ctx, memberSetKey, removeUserId)
+
+		// Remove from request members (safe even if not exists)
+		pipe.SRem(ctx, requestSetKey, removeUserId)
+
+		// Remove stored name
+		pipe.Del(ctx, nameKey)
+
+		return nil
+	})
+
+	return err
 }

@@ -434,10 +434,10 @@ func (h *ChatHandler) HandleGetRoomExits(w http.ResponseWriter, r *http.Request)
 
 	}
 	res := struct {
-		Exists bool `json:"exists"`
+		Exists   bool   `json:"exists"`
 		RoomName string `json:"roomName"`
 	}{
-		Exists: exists,
+		Exists:   exists,
 		RoomName: roomName,
 	}
 
@@ -489,4 +489,50 @@ func (h *ChatHandler) HandleGetTTL(w http.ResponseWriter, r *http.Request) {
 		resJson,
 	)
 
+}
+
+func (h *ChatHandler) HandleRemoveUser(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+	var req struct {
+		RoomID       string `json:"roomId"`
+		RemoveUserId string `json:"removeUserId"`
+		// MemberKey string `json:"memberKey"`
+	}
+
+	if err := json.Unmarshal(bodyBytes, &req); err != nil {
+		fmt.Println("json Identified !!")
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+
+	err2 := h.chatService.RemoveUser(ctx, req.RoomID, req.RemoveUserId)
+
+	if err2 != nil {
+		fmt.Println("json Identified  2!!")
+		http.Error(w, "user Not exists", http.StatusBadRequest)
+	}
+	// w.Write()
+	res := struct {
+		OK string `json:"ok"`
+	}{
+		OK: "ok",
+	}
+
+	resJson, _ := json.Marshal(res)
+	w.Header().Set("Content-Type", "application/json")
+	// w.Write([]byte(resJson))
+	
+	w.WriteHeader(http.StatusOK)
+	w.Write(resJson)
+	// w.Write(
+	// 	resJson,
+	// )
 }

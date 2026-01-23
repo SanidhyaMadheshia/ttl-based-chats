@@ -311,24 +311,11 @@ func (m *Manager) BroadcastToRoom(roomID string, event Event) { // ADDED
 
 // func (m *Manager) SendToAdmin()
 
-func (m *Manager) getRoomMembers(roomID string) []string {
-	m.RLock()
-	defer m.RUnlock()
-
-	members := []string{}
-	if room, ok := m.rooms[roomID]; ok {
-		for userID := range room {
-			members = append(members, userID)
-		}
-	}
-	return members
-}
-
 func checkOrigin(r *http.Request) bool {
-	
+
 	origin := r.Header.Get("Origin")
 	frontendUrl := os.Getenv("FRONTEND_URL")
-	
+
 	switch origin {
 	case "http://" + frontendUrl:
 		return true
@@ -370,6 +357,48 @@ func (m *Manager) SendToAdmin(roomID string, event Event) {
 	default:
 		log.Println("Admin's egress full, dropping event")
 	}
+}
+
+func (m *Manager) RemoveUserFromRoom(roomId, userId string) {
+	m.Lock()
+
+	clients, ok := m.rooms[roomId]
+	if !ok {
+		return
+	}
+
+	// clients[userId]
+	// delete(clients , clients[userId])
+	// for client := range clients {
+	// 	// Kick the removed user
+	// 	if client= userId {
+	// 		delete(clients, client)
+	// 		close(client.Send)
+	// 		continue
+	// 	}
+	// }
+	close(clients[userId].egress)
+	clients[userId].connection.Close()
+
+	// remove from room
+	delete(clients, userId)
+
+	// also remove from global client list
+	delete(m.clients, userId)
+
+	// Clean up empty room
+	if len(clients) == 0 {
+		delete(m.rooms, roomId)
+	}
+	m.Unlock()
+	m.broadcast <- RoomEvent{
+		RoomID: roomId ,
+		Event: Event{
+			Type:    "removed_room_member",
+			Payload: userId,
+		},
+	}
+
 }
 
 // func (m *Manager) ValidateWSConnection()
