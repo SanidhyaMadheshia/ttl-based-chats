@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	// "fmt"
 
@@ -312,19 +313,20 @@ func (m *Manager) BroadcastToRoom(roomID string, event Event) { // ADDED
 // func (m *Manager) SendToAdmin()
 
 func checkOrigin(r *http.Request) bool {
-
 	origin := r.Header.Get("Origin")
-	frontendUrl := os.Getenv("FRONTEND_FULL_URL")
 
-	
-	switch origin {
-	case frontendUrl:
+	// Allow non-browser clients / proxies
+	if origin == "" {
 		return true
-
-	default:
-		return false
 	}
-	// return false
+
+	frontendURL := os.Getenv("FRONTEND_FULL_URL")
+	if frontendURL == "" {
+		return true // fail-open if misconfigured
+	}
+
+	// Normalize
+	return strings.HasPrefix(origin, frontendURL)
 }
 
 func (m *Manager) SetRoomAdmin(roomID, userID string) {

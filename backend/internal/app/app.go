@@ -1,7 +1,9 @@
 package app
 
 import (
+	"log"
 	"net/http"
+	"os"
 
 	"github.com/SanidhyaMadheshia/ttl-based-chats/backend/internal/db"
 	"github.com/SanidhyaMadheshia/ttl-based-chats/backend/internal/handler"
@@ -57,7 +59,13 @@ func Run() {
 	corsHandler := middlewares.CORS(mux)
 	go WSmanager.Run() // Added
 
-	http.ListenAndServe(":8080", corsHandler)
+	// http.ListenAndServe(":8080", corsHandler)
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080" // local fallback
+	}
+	log.Println("Server listening on port", port)
+	log.Fatal(http.ListenAndServe(":"+port, corsHandler))
 	// return &http.Server{
 	// 	Addr:    ":8080",
 	// 	Handler: mux,
