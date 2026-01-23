@@ -65,11 +65,12 @@ export function Footer() {
           <div>
             <h4 className="font-semibold mb-4">Social</h4>
             <div className="flex gap-4">
-              <a href="#" className="text-muted-foreground hover:text-accent transition">
-                <Github className="w-5 h-5" />
-              </a>
-              <a href="#" className="text-muted-foreground hover:text-accent transition">
-                <Twitter className="w-5 h-5" />
+              <a href="https://github.com/SanidhyaMadheshia/ttl-based-chats" className="text-muted-foreground hover:text-accent transition"
+                
+              >
+                <Github className="w-5 h-5"
+
+                />
               </a>
             </div>
           </div>
