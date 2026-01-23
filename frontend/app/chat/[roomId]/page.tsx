@@ -279,7 +279,7 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
     ws.onclose = () => {
       console.log("WebSocket closed")
       router.push(`${roomId}/not-found`);
-      
+
     }
 
     wsRef.current = ws
@@ -684,6 +684,7 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
                   <ChatMessages
                     messages={messages}
                     userId={userId}
+                    roomId= {roomId}
                   />
                 </div>
 
