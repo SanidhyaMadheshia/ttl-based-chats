@@ -7,7 +7,7 @@ import { Send, Smile, Mic, Phone } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useState, useRef, useEffect } from "react"
-import EmojiPicker, { EmojiClickData } from "emoji-picker-react"
+import EmojiPicker, { EmojiClickData , Theme} from "emoji-picker-react"
 
 
 interface ChatInputProps {
@@ -80,6 +80,7 @@ export function ChatInput({ onSendMessage, isMuted, onJoinVoice, isUserInVoice, 
                 onEmojiClick={handleEmojiClick}
                 height={320}
                 width={280}
+                theme={Theme.DARK}
                 previewConfig={{ showPreview: false }}
               />
             </div>
