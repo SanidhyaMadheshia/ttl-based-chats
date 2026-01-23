@@ -3,12 +3,13 @@ import type { Metadata } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 // import { Analytics } from "@/components/"
 import "./globals.css"
-
+import { useBackendHealth } from "@/hooks/useBackendHealth"
+import { BackendLoader } from "@/components/BackendLoader"
 const _geist = Geist({ subsets: ["latin"] })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Ephemeral - Secure Temporary Chat",
+  title: "Ephemeral Chats- Secure Temporary Chat",
   description: "Real-time chat with automatic expiration. No signup, no storage. Just connect via room ID and chat.",
   generator: "v0.app",
   icons: {
@@ -35,6 +36,17 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const { ready, seconds } = useBackendHealth()
+
+  if (!ready) {
+    return (
+      <html>
+        <body>
+          <BackendLoader seconds={seconds} />
+        </body>
+      </html>
+    )
+  }
   return (
     <html lang="en" className="dark">
       <body className={`font-sans antialiased`}>
