@@ -314,10 +314,11 @@ func (m *Manager) BroadcastToRoom(roomID string, event Event) { // ADDED
 func checkOrigin(r *http.Request) bool {
 
 	origin := r.Header.Get("Origin")
-	frontendUrl := os.Getenv("FRONTEND_URL")
+	frontendUrl := os.Getenv("FRONTEND_FULL_URL")
 
+	
 	switch origin {
-	case "http://" + frontendUrl:
+	case frontendUrl:
 		return true
 
 	default:
@@ -392,7 +393,7 @@ func (m *Manager) RemoveUserFromRoom(roomId, userId string) {
 	}
 	m.Unlock()
 	m.broadcast <- RoomEvent{
-		RoomID: roomId ,
+		RoomID: roomId,
 		Event: Event{
 			Type:    "removed_room_member",
 			Payload: userId,
