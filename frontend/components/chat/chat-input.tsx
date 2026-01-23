@@ -74,17 +74,18 @@ export function ChatInput({ onSendMessage, isMuted, onJoinVoice, isUserInVoice, 
           {openEmoji && (
             <div
               ref={emojiRef}
-              className="absolute bottom-12 left-0 z-50"
+              className="absolute bottom-full right-0 mb-2 z-50 rounded-lg border bg-background shadow-lg max-w-[90vw]"
             >
               <EmojiPicker
                 onEmojiClick={handleEmojiClick}
-                height={300}
+                height={320}
                 width={280}
                 previewConfig={{ showPreview: false }}
               />
             </div>
           )}
         </div>
+
 
         {/* <Button size="sm" variant="ghost" className="px-2" title="Mic input">
           <Mic className="h-5 w-5" />
