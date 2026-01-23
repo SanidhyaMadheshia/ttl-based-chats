@@ -12,12 +12,9 @@ type RedisClient struct {
 
 func NewRedisClient() *RedisClient {
 	redisUrl := os.Getenv("REDIS_URL")
+	opt, _ := redis.ParseURL(redisUrl)
 	return &RedisClient{
-		Client: redis.NewClient(&redis.Options{
-			Addr: redisUrl,
-			// Password: "", // no password set
-			DB: 0, // use default DB
-		}),
+		Client: redis.NewClient(opt),
 	}
 }
 
