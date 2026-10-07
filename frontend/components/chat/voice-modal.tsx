@@ -1,6 +1,6 @@
 "use client"
 
-import { X, Mic, Users } from "lucide-react"
+import { X, Mic, Users, Video } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 
@@ -9,24 +9,27 @@ type VoiceUser = {
   name: string
   isAdmin: boolean
   isMuted: boolean
+  isVideoOn?: boolean
 }
 
 interface VoiceModalProps {
-  onJoin: () => void
+  onJoin: (opts: { video: boolean }) => void
   onClose: () => void
   voiceUsers: VoiceUser[]
+  isConnecting?: boolean
+  error?: string | null
 }
 
-export function VoiceModal({ onJoin, onClose, voiceUsers }: VoiceModalProps) {
+export function VoiceModal({ onJoin, onClose, voiceUsers, isConnecting = false, error }: VoiceModalProps) {
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
+    <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50" role="dialog" aria-modal="true" aria-labelledby="voice-modal-title">
       <Card className="w-full max-w-md bg-card p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Mic className="h-5 w-5 text-accent" />
-            <h2 className="text-lg font-semibold text-foreground">Join Voice</h2>
+            <h2 id="voice-modal-title" className="text-lg font-semibold text-foreground">Join Call</h2>
           </div>
-          <Button size="sm" variant="ghost" onClick={onClose} className="h-6 w-6 p-0">
+          <Button size="sm" variant="ghost" onClick={onClose} className="h-6 w-6 p-0" aria-label="Close">
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -42,6 +45,7 @@ export function VoiceModal({ onJoin, onClose, voiceUsers }: VoiceModalProps) {
                 <div key={user.id} className="flex items-center justify-between text-xs">
                   <span className="text-muted-foreground">{user.name}</span>
                   <div className="flex items-center gap-1">
+                    {user.isVideoOn && <Video className="h-3 w-3 text-accent" aria-label="camera on" />}
                     {user.isMuted && <span className="text-destructive">muted</span>}
                     <div
                       className={`h-2 w-2 rounded-full ${
@@ -57,13 +61,23 @@ export function VoiceModal({ onJoin, onClose, voiceUsers }: VoiceModalProps) {
           )}
         </div>
 
+        {error && (
+          <p role="alert" className="mb-4 text-sm text-destructive">
+            {error}
+          </p>
+        )}
+
         <div className="flex gap-2">
           <Button onClick={onClose} variant="outline" className="flex-1 bg-transparent">
             Cancel
           </Button>
-          <Button onClick={onJoin} className="flex-1 gap-2">
+          <Button onClick={() => onJoin({ video: false })} variant="secondary" className="flex-1 gap-2" disabled={isConnecting}>
             <Mic className="h-4 w-4" />
-            Join Voice
+            {isConnecting ? "Connecting..." : "Voice"}
+          </Button>
+          <Button onClick={() => onJoin({ video: true })} className="flex-1 gap-2" disabled={isConnecting}>
+            <Video className="h-4 w-4" />
+            {isConnecting ? "Connecting..." : "Video"}
           </Button>
         </div>
       </Card>

@@ -217,6 +217,35 @@ This immediately invalidates the room for all users.
 
 ---
 
+## Voice & Video Chat (WebRTC)
+
+* Audio/video is **peer-to-peer (full mesh)**; the server never sees media, only relays signaling over the existing `/ws` connection
+* Voice roster (incl. mute/camera state) is **in memory only** (not in Redis) and is cleared on disconnect / room expiry
+* Max **8** participants per room (mesh cost grows O(n²)); video is capped at 640×360 @ ≤30fps, ~500 kbps per peer
+* Each peer connection always negotiates one audio + one video slot; toggling the camera swaps the track (`replaceTrack`) with no renegotiation
+
+| Event (client → server) | Payload | Purpose |
+|---|---|---|
+| `voice_join` | `""` | Join voice; server replies `voice_joined` with peers to call |
+| `voice_leave` | `""` | Leave voice |
+| `voice_mute` | `"true"` / `"false"` | Update own mute state |
+| `voice_video` | `"true"` / `"false"` | Update own camera state |
+| `voice_signal` | `{"to": userId, "data": {...}}` | Relay SDP offer/answer or ICE candidate |
+
+Server → client: `voice_joined`, `voice_participants` (`[{userId, muted, video}]`), `voice_user_left`, `voice_signal` (`from` is set by the server), `voice_error`.
+
+Optional TURN config (frontend `.env`), needed for users behind strict NATs:
+
+```
+NEXT_PUBLIC_TURN_URL=turn:turn.example.com:3478
+NEXT_PUBLIC_TURN_USERNAME=...
+NEXT_PUBLIC_TURN_CREDENTIAL=...
+```
+
+Microphone/camera access requires HTTPS (or `localhost`).
+
+---
+
 ## Key Design Principles
 
 * ⚡ **O(1) Redis access**

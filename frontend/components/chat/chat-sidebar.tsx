@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Users, AlertCircle, LogOut, MicOff, Trash2, Check, X, Mic, PhoneMissed } from "lucide-react"
+import { Users, AlertCircle, LogOut, MicOff, Trash2, Check, X, Mic, PhoneMissed, Video } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { RequestMember } from "@/lib/types"
@@ -17,6 +17,7 @@ type VoiceUser = {
   name: string
   isAdmin: boolean
   isMuted: boolean
+  isVideoOn?: boolean
 }
 
 interface ChatSidebarProps {
@@ -27,12 +28,11 @@ interface ChatSidebarProps {
   onMuteUser: (userId: string) => void
   onApproveRequest: (index: string) => void
   onRejectRequest: (index: string) => void
-  onMuteVoiceUser: (userId: string) => void
-  onRemoveVoiceUser: (userId: string) => void
   onlineMembers: string[]
   requestMembers: RequestMember[]
   role: string
   isUserInVoice: boolean
+  currentUserId: string
 }
 
 export function ChatSidebar({
@@ -46,9 +46,8 @@ export function ChatSidebar({
   onMuteUser,
   onApproveRequest,
   onRejectRequest,
-  onMuteVoiceUser,
-  onRemoveVoiceUser,
   isUserInVoice,
+  currentUserId,
 }: ChatSidebarProps) {
   const [expandedUser, setExpandedUser] = useState<string | null>(null)
   const isAdmin = role === "admin" ? true : false
@@ -119,52 +118,37 @@ export function ChatSidebar({
       )}
 
 
-      {/* {voiceUsers.length > 0 && (
+      {voiceUsers.length > 0 && (
         <div className="mb-6">
           <div className="flex items-center gap-2 mb-3">
             <Mic className="h-4 w-4 text-accent" />
             <h2 className="text-sm font-semibold text-foreground">In Voice ({voiceUsers.length})</h2>
           </div>
-          <div className="space-y-2">
+          <ul className="space-y-2">
             {voiceUsers.map((user) => (
-              <div
+              <li
                 key={user.id}
-                className="group flex items-center justify-between rounded-lg bg-green-500/10 border border-green-500/20 px-3 py-2 transition-colors hover:bg-green-500/20"
+                className="flex items-center justify-between rounded-lg bg-green-500/10 border border-green-500/20 px-3 py-2"
               >
                 <div className="flex items-center gap-2 min-w-0">
-                  <div
-                    className={`h-2 w-2 rounded-full ${user.isMuted ? "bg-destructive" : "bg-green-500 animate-pulse"}`}
-                  ></div>
-                  <span className="text-sm text-foreground truncate">{user.name}</span>
-                  {user.isMuted && <span className="text-xs text-destructive">muted</span>}
+                  <span
+                    className={`h-2 w-2 shrink-0 rounded-full ${user.isMuted ? "bg-destructive" : "bg-green-500 animate-pulse"}`}
+                    aria-hidden="true"
+                  />
+                  <span className="text-sm text-foreground truncate">
+                    {user.name}
+                    {user.id === currentUserId && " (you)"}
+                  </span>
                 </div>
-                {isAdmin && user.id !== "1" && (
-                  <div className="hidden gap-1 group-hover:flex">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-5 w-5 p-0"
-                      onClick={() => onMuteVoiceUser(user.id)}
-                      title={user.isMuted ? "Unmute" : "Mute"}
-                    >
-                      <MicOff className={`h-3 w-3 ${user.isMuted ? "text-destructive" : ""}`} />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-5 w-5 p-0"
-                      onClick={() => onRemoveVoiceUser(user.id)}
-                      title="Remove from voice"
-                    >
-                      <PhoneMissed className="h-3 w-3 text-destructive" />
-                    </Button>
-                  </div>
-                )}
-              </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  {user.isVideoOn && <Video className="h-3 w-3 text-accent" aria-label="camera on" />}
+                  {user.isMuted && <MicOff className="h-3 w-3 text-destructive" aria-label="muted" />}
+                </div>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
-      )} */}
+      )}
 
       {onlineMembers.length > 0 && (
         <div className="mb-6">

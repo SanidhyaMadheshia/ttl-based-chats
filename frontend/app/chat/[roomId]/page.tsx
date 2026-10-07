@@ -6,6 +6,9 @@ import { ChatSidebar } from "@/components/chat/chat-sidebar"
 import { ChatMessages } from "@/components/chat/chat-messages"
 import { ChatInput } from "@/components/chat/chat-input"
 import { VoiceModal } from "@/components/chat/voice-modal"
+import { VoiceAudio } from "@/components/chat/voice-audio"
+import { VideoGrid, type VideoTile } from "@/components/chat/video-grid"
+import { useVoiceChat } from "@/hooks/useVoiceChat"
 import axios from "axios"
 import { RequestJoinModal } from "@/components/requestJoinModal"
 import { Sidebar, SidebarContent, SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
@@ -22,6 +25,7 @@ type VoiceUser = {
   name: string
   isAdmin: boolean
   isMuted: boolean
+  isVideoOn: boolean
 }
 
 type Message = {
@@ -63,13 +67,9 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
     { id: "3", name: "Bob", isAdmin: false },
   ])
 
-  const [voiceUsers, setVoiceUsers] = useState<VoiceUser[]>([
-    { id: "2", name: "Alice", isAdmin: false, isMuted: false },
-  ])
   const [pendingRequests, setPendingRequests] = useState(2)
   const [isMuted, setIsMuted] = useState(false)
   const [showVoiceModal, setShowVoiceModal] = useState(false)
-  const [isUserInVoice, setIsUserInVoice] = useState(false)
   // const [roomId , setRoomId]= useState<string>("");
 
   const [userId, setUserId] = useState<string>("")
@@ -86,6 +86,41 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
 
   const [roomReady, setRoomReady] = useState<boolean>(false)
   const router = useRouter()
+
+  const voice = useVoiceChat(wsRef, userId)
+  const { handleVoiceEvent } = voice
+  const voiceUsers: VoiceUser[] = voice.participants.map((p) => {
+    const user = users.find((u) => u.id === p.userId)
+    return {
+      id: p.userId,
+      name: user?.name ?? "Unknown user",
+      isAdmin: user?.isAdmin ?? false,
+      isMuted: p.muted,
+      isVideoOn: p.video,
+    }
+  })
+  // Local tile first, then every remote peer we have a connection with.
+  const videoTiles: VideoTile[] = voice.isInVoice
+    ? [
+        {
+          id: userId,
+          name: usersRefMap.current.get(userId)?.name ?? "You",
+          stream: voice.localVideoStream,
+          videoOn: voice.isVideoOn,
+          muted: voice.isMuted,
+          isLocal: true,
+        },
+        ...voiceUsers
+          .filter((u) => u.id !== userId)
+          .map((u) => ({
+            id: u.id,
+            name: u.name,
+            stream: voice.remoteStreams[u.id] ?? null,
+            videoOn: u.isVideoOn,
+            muted: u.isMuted,
+          })),
+      ]
+    : []
 
 
   var ws;
@@ -290,6 +325,9 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
   }, [role, userId, roomId])
 
   function handleWsEvent(data: any) {
+    // WebRTC signaling / voice roster events
+    if (handleVoiceEvent(data)) return
+
     switch (data.type) {
       case "message":
         const msg = messageParser(data.payload, usersRefMap.current)
@@ -332,6 +370,7 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
           if (prev.some(m => m.id === newRequest.id)) return prev
           return [...prev, newRequest]
         });
+        break
 
       case "removed_room_member": {
         const payload = data.payload
@@ -508,64 +547,14 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
     ])
   }
 
-  const handleJoinVoice = () => {
-    const currentUser = users.find((u) => u.id === "1")
-    if (currentUser && !isUserInVoice) {
-      setVoiceUsers((prev) => [
-        ...prev,
-        { id: currentUser.id, name: currentUser.name, isAdmin: currentUser.isAdmin, isMuted: false },
-      ])
-      setIsUserInVoice(true)
-      setShowVoiceModal(false)
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Math.random().toString(),
-          userId: "system",
-          userName: "System",
-          content: `${currentUser.name} joined voice`,
-          timestamp: Date.now(),
-          isSystemMessage: true,
-        },
-      ])
-    }
+  const handleJoinVoice = async ({ video }: { video: boolean }) => {
+    if (voice.isInVoice) return
+    const joined = await voice.join({ video })
+    if (joined) setShowVoiceModal(false)
   }
 
   const handleLeaveVoice = () => {
-    const currentUser = users.find((u) => u.id === "1")
-    setVoiceUsers((prev) => prev.filter((u) => u.id !== "1"))
-    setIsUserInVoice(false)
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: Math.random().toString(),
-        userId: "system",
-        userName: "System",
-        content: `${currentUser?.name} left voice`,
-        timestamp: Date.now(),
-        isSystemMessage: true,
-      },
-    ])
-  }
-
-  const handleMuteVoiceUser = (userId: string) => {
-    setVoiceUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, isMuted: !u.isMuted } : u)))
-  }
-
-  const handleRemoveVoiceUser = (userId: string) => {
-    const user = voiceUsers.find((u) => u.id === userId)
-    setVoiceUsers((prev) => prev.filter((u) => u.id !== userId))
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: Math.random().toString(),
-        userId: "system",
-        userName: "System",
-        content: `${user?.name} was removed from voice`,
-        timestamp: Date.now(),
-        isSystemMessage: true,
-      },
-    ])
+    voice.leave()
   }
 
   // return (
@@ -658,9 +647,8 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
                   onMuteUser={handleMuteUser}
                   onApproveRequest={handleApproveRequest}
                   onRejectRequest={handleRejectRequest}
-                  onMuteVoiceUser={handleMuteVoiceUser}
-                  onRemoveVoiceUser={handleRemoveVoiceUser}
-                  isUserInVoice={isUserInVoice}
+                  isUserInVoice={voice.isInVoice}
+                  currentUserId={userId}
                 />
               </SidebarContent>
             </Sidebar>
@@ -680,6 +668,9 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
 
               {/* CHAT */}
               <div className="flex flex-1 flex-col overflow-hidden">
+                {voice.isInVoice && (
+                  <VideoGrid tiles={videoTiles} error={voice.error} />
+                )}
                 <div className="flex-1 overflow-y-auto">
                   <ChatMessages
                     messages={messages}
@@ -691,15 +682,37 @@ export default function ChatRoom({ params }: { params: Promise<{ roomId: string 
                 <ChatInput
                   onSendMessage={handleSendMessage}
                   isMuted={isMuted}
-                  onJoinVoice={handleJoinVoice}
-                  isUserInVoice={false}
+                  onJoinVoice={() => {
+                    voice.clearError()
+                    setShowVoiceModal(true)
+                  }}
+                  isUserInVoice={voice.isInVoice}
                   onLeaveVoice={handleLeaveVoice}
+                  isVoiceMuted={voice.isMuted}
+                  onToggleVoiceMute={voice.toggleMute}
+                  isVideoOn={voice.isVideoOn}
+                  onToggleVideo={voice.toggleVideo}
                 />
               </div>
 
             </SidebarInset>
           </div>
         </div>
+
+        {/* VOICE */}
+        <VoiceAudio streams={voice.remoteStreams} />
+        {(showVoiceModal || (voice.error && !voice.isInVoice)) && (
+          <VoiceModal
+            voiceUsers={voiceUsers}
+            onJoin={handleJoinVoice}
+            onClose={() => {
+              voice.clearError()
+              setShowVoiceModal(false)
+            }}
+            isConnecting={voice.isConnecting}
+            error={voice.error}
+          />
+        )}
 
         {/* REQUEST MODAL */}
         {showRequestModal && (

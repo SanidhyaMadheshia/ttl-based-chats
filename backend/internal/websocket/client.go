@@ -19,6 +19,8 @@ var (
 	pingInterval = (pongWait * 9) / 10
 )
 
+const maxMessageSize = 32 * 1024
+
 type ClientList map[string]*Client // r
 
 type Client struct {
@@ -70,7 +72,9 @@ func (c *Client) ReadMessages() {
 
 	c.connection.SetPongHandler(c.pongHandler)
 
-	c.connection.SetReadLimit(512) // jumbo frames ..
+	// WebRTC SDP offers/answers are typically 2-6 KB (more once JSON-escaped),
+	// so the limit must comfortably exceed that.
+	c.connection.SetReadLimit(maxMessageSize)
 
 	for {
 		// log.Println("hello bhai")

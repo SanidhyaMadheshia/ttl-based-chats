@@ -47,6 +47,9 @@ type Manager struct {
 	sync.RWMutex
 	handlers map[string]EventHandler
 
+	// roomId -> userId -> voice session (in-memory only; dies with the room/connection)
+	voice map[string]map[string]*voiceMember
+
 	rdb *db.RedisClient
 }
 
@@ -61,6 +64,7 @@ func NewManager(rdb *db.RedisClient) *Manager {
 		rooms:      make(map[string]ClientList),
 		admins:     make(map[string]string),
 		handlers:   make(map[string]EventHandler),
+		voice:      make(map[string]map[string]*voiceMember),
 	}
 
 	m.setupEventHadlers()
@@ -72,6 +76,12 @@ func (m *Manager) setupEventHadlers() {
 	m.handlers[EventSendMesage] = SendMessage // placeholder for now
 	m.handlers["message"] = SendMessage
 
+	// WebRTC voice signaling
+	m.handlers[EventVoiceJoin] = VoiceJoin
+	m.handlers[EventVoiceLeave] = VoiceLeave
+	m.handlers[EventVoiceMute] = VoiceMute
+	m.handlers[EventVoiceVideo] = VoiceVideo
+	m.handlers[EventVoiceSignal] = VoiceSignal
 }
 
 func (m *Manager) RouteEvent(event Event, c *Client) error {
@@ -214,9 +224,23 @@ func (m *Manager) addClient(c *Client) {
 		// }
 	}
 	payloadBytes, _ := json.Marshal(members)
+
+	// A new connection for this user means any voice session from an older
+	// connection (e.g. before a page reload) is dead; drop it so peers clean up.
+	staleVoice := false
+	if member, ok := m.voice[c.RoomID][c.UserID]; ok && member.client != c {
+		staleVoice = m.removeVoiceMemberLocked(c.RoomID, c.UserID, nil)
+	}
+	voiceRoster := m.voiceParticipantsLocked(c.RoomID)
 	m.Unlock()
 	fmt.Println(members)
 	fmt.Println("Broadcasting to all members : addClinet ")
+
+	if staleVoice {
+		m.broadcastVoiceLeft(c.RoomID, c.UserID, voiceRoster)
+	}
+	// Let the newcomer see who is already in voice before joining.
+	m.sendToClient(c, Event{Type: EventVoiceParticipants, Payload: mustJSON(voiceRoster)})
 
 	m.broadcast <- RoomEvent{
 		RoomID: c.RoomID,
@@ -249,26 +273,40 @@ func (m *Manager) removeClient(c *Client) {
 
 	m.Lock()
 
-	delete(m.clients, c.UserID)
+	// Ignore stale connections: if the user reconnected, a newer *Client is
+	// registered under the same userId and must not be removed.
+	current, registered := m.rooms[c.RoomID][c.UserID]
+	if registered && current != c {
+		m.Unlock()
+		return
+	}
+
+	if m.clients[c.UserID] == c {
+		delete(m.clients, c.UserID)
+	}
 	fmt.Println("client disconnected : ", c.UserID)
 	shouldBroadcast := false
-	if room, ok := m.rooms[c.RoomID]; ok {
+	members := []string{}
+	if room, ok := m.rooms[c.RoomID]; ok && registered {
 		delete(room, c.UserID)
+		for userID := range room {
+			members = append(members, userID)
+		}
 		if len(room) == 0 {
 			delete(m.rooms, c.RoomID)
 		}
 
 		shouldBroadcast = true
 	}
+	leftVoice := m.removeVoiceMemberLocked(c.RoomID, c.UserID, c)
+	voiceRoster := m.voiceParticipantsLocked(c.RoomID)
 	m.Unlock()
 
+	if leftVoice {
+		m.broadcastVoiceLeft(c.RoomID, c.UserID, voiceRoster)
+	}
+
 	if shouldBroadcast {
-		members := []string{}
-		for userID := range m.rooms[c.RoomID] {
-			// if userID != c.UserID {
-			members = append(members, userID)
-			// }
-		}
 		payloadBytes, _ := json.Marshal(members)
 		fmt.Println(members)
 		fmt.Println("Broadcasting to all members : addClinet ")

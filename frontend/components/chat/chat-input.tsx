@@ -3,7 +3,7 @@
 import type React from "react"
 
 // import { useState } from "react"
-import { Send, Smile, Mic, Phone } from "lucide-react"
+import { Send, Smile, Mic, MicOff, Phone, PhoneOff, Video, VideoOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useState, useRef, useEffect } from "react"
@@ -16,9 +16,23 @@ interface ChatInputProps {
   onJoinVoice: () => void
   isUserInVoice: boolean
   onLeaveVoice: () => void
+  isVoiceMuted: boolean
+  onToggleVoiceMute: () => void
+  isVideoOn: boolean
+  onToggleVideo: () => void
 }
 
-export function ChatInput({ onSendMessage, isMuted, onJoinVoice, isUserInVoice, onLeaveVoice }: ChatInputProps) {
+export function ChatInput({
+  onSendMessage,
+  isMuted,
+  onJoinVoice,
+  isUserInVoice,
+  onLeaveVoice,
+  isVoiceMuted,
+  onToggleVoiceMute,
+  isVideoOn,
+  onToggleVideo,
+}: ChatInputProps) {
   const [message, setMessage] = useState("")
   const [openEmoji, setOpenEmoji] = useState(false)
   const emojiRef = useRef<HTMLDivElement>(null)
@@ -88,18 +102,42 @@ export function ChatInput({ onSendMessage, isMuted, onJoinVoice, isUserInVoice, 
         </div>
 
 
-        {/* <Button size="sm" variant="ghost" className="px-2" title="Mic input">
-          <Mic className="h-5 w-5" />
-        </Button> */}
-        {/* <Button
+        {isUserInVoice && (
+          <Button
+            size="sm"
+            variant={isVideoOn ? "secondary" : "ghost"}
+            className="px-2"
+            onClick={onToggleVideo}
+            title={isVideoOn ? "Turn camera off" : "Turn camera on"}
+            aria-label={isVideoOn ? "Turn camera off" : "Turn camera on"}
+            aria-pressed={isVideoOn}
+          >
+            {isVideoOn ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
+          </Button>
+        )}
+        {isUserInVoice && (
+          <Button
+            size="sm"
+            variant={isVoiceMuted ? "destructive" : "ghost"}
+            className="px-2"
+            onClick={onToggleVoiceMute}
+            title={isVoiceMuted ? "Unmute microphone" : "Mute microphone"}
+            aria-label={isVoiceMuted ? "Unmute microphone" : "Mute microphone"}
+            aria-pressed={isVoiceMuted}
+          >
+            {isVoiceMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+          </Button>
+        )}
+        <Button
           size="sm"
           variant={isUserInVoice ? "destructive" : "ghost"}
           className="px-2"
           onClick={isUserInVoice ? onLeaveVoice : onJoinVoice}
           title={isUserInVoice ? "Leave voice" : "Join voice"}
-        > */}
-        {/* <Phone className={`h-5 w-5 ${isUserInVoice ? "" : ""}`} /> */}
-        {/* </Button> */}
+          aria-label={isUserInVoice ? "Leave voice" : "Join voice"}
+        >
+          {isUserInVoice ? <PhoneOff className="h-5 w-5" /> : <Phone className="h-5 w-5" />}
+        </Button>
         <Button size="sm" onClick={handleSend} disabled={!message.trim()} className="gap-2">
           <Send className="h-4 w-4" />
           Send
