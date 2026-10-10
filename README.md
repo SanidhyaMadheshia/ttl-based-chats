@@ -180,6 +180,8 @@ EXPIRE room:roomUser:<roomId> <ttl_in_seconds>
 
 ## TTL Lifecycle
 
+> **Note:** the current code starts the TTL at room creation (`CreateChatRoom` sets `EXPIRE`), and the messages list currently never expires due to a bug. See [docs/01-system-overview.md §7](./docs/01-system-overview.md). The bullets below describe the intended design.
+
 * TTL is **not started at room creation**
 * TTL starts when:
 
@@ -243,6 +245,80 @@ NEXT_PUBLIC_TURN_CREDENTIAL=...
 ```
 
 Microphone/camera access requires HTTPS (or `localhost`).
+
+---
+
+## Architecture Deep Dive
+
+Full docs are in [`docs/`](./docs/README.md), with 79 Mermaid sequence diagrams covering every flow:
+
+| Doc | Covers |
+|---|---|
+| [01 · System overview](./docs/01-system-overview.md) | Components, API, auth, Redis model, room/TTL lifecycle, end-to-end message flow |
+| [02 · WebSocket architecture](./docs/02-websocket-architecture.md) | Handshake, frames, heartbeats, close codes, hub pattern, fan-out, slow consumers, reconnects, CSWSH, WS auth |
+| [03 · Goroutines & concurrency](./docs/03-goroutines-and-concurrency.md) | Scheduler + netpoller, goroutine/channel inventory, locking, concurrency hazards and fixes, 1M-connection memory math |
+| [04 · WebRTC signaling](./docs/04-webrtc-signaling.md) | SDP/ICE/STUN/TURN/DTLS-SRTP, signaling protocol, glare, `replaceTrack` camera toggle, mesh vs SFU vs MCU |
+| [05 · Scaling to millions](./docs/05-scaling-to-millions.md) | Stateless gateways, pub/sub fan-out, room sharding, ordering, reconnect storms, multi-region, SFU + TURN fleets, roadmap |
+| [06 · Interview guide](./docs/06-interview-guide.md) | Pitch, system-design walkthrough, 60+ Q&A, gotchas, cheat sheet, whiteboard drills |
+
+### Backend in one picture: goroutines per message
+
+Each WebSocket connection gets two goroutines: a reader, which runs the event handlers, and a single writer, which owns the socket for writes. One hub goroutine (`Manager.Run`) handles register, unregister and broadcast.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor A as Alice browser
+    participant RA as Alice reader goroutine
+    participant R as Redis
+    participant HUB as Hub goroutine Manager.Run
+    participant WB as Bob writer goroutine
+    actor B as Bob browser
+    A->>RA: WS text frame type message
+    RA->>RA: json decode then RouteEvent to SendMessage
+    RA->>R: RPUSH room messages
+    RA->>HUB: RoomEvent on broadcast channel
+    HUB->>WB: non-blocking send on Bob egress channel
+    WB->>B: WriteMessage text frame
+    Note over HUB,WB: full egress buffer means slow consumer so client is evicted
+```
+
+### WebRTC signaling in one picture
+
+The server only relays signaling messages. Audio and video go peer-to-peer.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor A as Alice in voice
+    participant S as Go signaling server
+    actor B as Bob joining
+    B->>S: voice_join
+    S-->>B: voice_joined with peers Alice
+    S-->>A: voice_participants roster
+    B->>S: voice_signal to Alice offer SDP
+    S->>A: voice_signal from Bob offer, from is set by server
+    A->>S: voice_signal to Bob answer SDP
+    S->>B: voice_signal from Alice answer
+    par trickle ICE
+        A->>S: candidates for Bob
+        S->>B: relay
+    and
+        B->>S: candidates for Alice
+        S->>A: relay
+    end
+    A-->B: SRTP media flows peer to peer, never via server
+```
+
+### Scaling path (summary)
+
+1. **Fix the bugs:** WS auth, exact-match origin allow-list, message TTL, no hub self-send, client reconnect with backoff.
+2. **Run multiple instances:** stateless WS gateways plus Redis pub/sub fan-out, with presence and voice roster moved out of process memory.
+3. **Shard rooms:** consistent hashing of rooms onto owner shards, per-room sequence numbers, resumable reconnect.
+4. **Media through an SFU:** LiveKit, mediasoup or Pion, with simulcast and a coturn TURN fleet with ephemeral credentials.
+5. **Go multi-region:** geo routing, a home region per room, cascaded SFUs.
+
+Details, capacity math and trade-offs are in [docs/05](./docs/05-scaling-to-millions.md).
 
 ---
 
